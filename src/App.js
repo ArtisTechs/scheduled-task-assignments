@@ -1,25 +1,40 @@
-import logo from './logo.svg';
-import './App.css';
+import { useState } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Offcanvas } from "react-bootstrap";
+import Header from "./components/Header";
+import SideMenu from "./components/SideMenu";
+import UserAssignmentPage from "./pages/UserAssignmentPage";
 
-function App() {
+export default function App() {
+  const [showMenu, setShowMenu] = useState(false);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <BrowserRouter>
+      <Header onToggle={() => setShowMenu(true)} />
+
+      <Offcanvas
+        show={showMenu}
+        onHide={() => setShowMenu(false)}
+        backdrop
+        placement="start"
+        className="bg-dark text-white"
+      >
+        <Offcanvas.Header closeButton>
+          <Offcanvas.Title>Scheduler</Offcanvas.Title>
+        </Offcanvas.Header>
+
+        <Offcanvas.Body className="p-0">
+          <SideMenu onNavigate={() => setShowMenu(false)} />
+        </Offcanvas.Body>
+      </Offcanvas>
+
+      <div className="container-fluid">
+        <div className="p-4">
+          <Routes>
+            <Route path="/" element={<UserAssignmentPage />} />
+          </Routes>
+        </div>
+      </div>
+    </BrowserRouter>
   );
 }
-
-export default App;

@@ -1,0 +1,11 @@
+export default function Header({ collapsed, onToggle }) {
+  return (
+    <nav className="navbar navbar-dark bg-dark px-3" style={{ height: "56px" }}>
+      <button className="btn btn-outline-light btn-sm me-3" onClick={onToggle}>
+        ☰
+      </button>
+
+      <span className="navbar-brand mb-0 h6">Schedule Assignment System</span>
+    </nav>
+  );
+}
