@@ -1,23 +1,30 @@
 import { Nav } from "react-bootstrap";
 import { NavLink } from "react-router-dom";
 
-export default function SideMenu() {
-  return (
-    <Nav className="flex-column p-3 gap-2">
-      <h6 className="text-white border-bottom pb-2 mb-3">
-        Scheduler
-      </h6>
+export default function SideMenu({ onNavigate }) {
+  const linkClass = ({ isActive }) =>
+    [
+      "nav-link",
+      "text-white",
+      "d-flex",
+      "align-items-center",
+      "px-3",
+      "py-2",
+      "rounded",
+      isActive ? "bg-primary fw-semibold" : "text-opacity-75",
+    ].join(" ");
 
-      <Nav.Link
-        as={NavLink}
-        to="/"
-        className="text-white d-flex align-items-center"
-      >
+  return (
+    <Nav className="flex-column p-2 gap-1">
+      <NavLink to="/" onClick={onNavigate} className={linkClass}>
         <i className="fas fa-users me-2"></i>
         User Assignment
-      </Nav.Link>
+      </NavLink>
 
-      {/* future items */}
+      <NavLink to="/import-persons" onClick={onNavigate} className={linkClass}>
+        <i className="fas fa-file-excel me-2"></i>
+        Import Persons
+      </NavLink>
     </Nav>
   );
 }

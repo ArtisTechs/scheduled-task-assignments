@@ -1,19 +1,22 @@
 import { useState } from "react";
 
-export default function FormModal({ person, onSave, onClose }) {
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+export default function FormModal({ person, onSave, onClose, error }) {
   const [name, setName] = useState(person.name || "");
 
   function submit() {
     onSave({
-      id: person.id || crypto.randomUUID(),
-      name,
+      id: person.id || generateId(),
+      name: name.trim(),
       assignments: person.assignments || [],
     });
   }
 
   return (
     <>
-      {/* Modal */}
       <div className="modal fade show d-block" tabIndex="-1" role="dialog">
         <div className="modal-dialog modal-dialog-centered" role="document">
           <div className="modal-content">
@@ -25,11 +28,14 @@ export default function FormModal({ person, onSave, onClose }) {
             </div>
 
             <div className="modal-body">
+              {error && <div className="alert alert-danger py-2">{error}</div>}
+
               <input
                 className="form-control"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Name"
+                autoFocus
               />
             </div>
 
@@ -37,7 +43,11 @@ export default function FormModal({ person, onSave, onClose }) {
               <button className="btn btn-secondary" onClick={onClose}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={submit}>
+              <button
+                className="btn btn-primary"
+                onClick={submit}
+                disabled={!name.trim()}
+              >
                 Save
               </button>
             </div>
@@ -45,7 +55,6 @@ export default function FormModal({ person, onSave, onClose }) {
         </div>
       </div>
 
-      {/* Backdrop */}
       <div className="modal-backdrop fade show"></div>
     </>
   );

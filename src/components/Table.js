@@ -1,10 +1,19 @@
-const OPTIONS = ["Morning", "Afternoon", "Night"];
+const OPTIONS = ["Elder", "MS", "Student", "Bible Reader"];
 
-export default function Table({ persons, onEdit, onDelete, onUpdate }) {
+export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
+  // Normalize dataset once per render
+  const normalizedPersons = persons.map((p) => ({
+    id: p.id,
+    name: p.name ?? "",
+    assignments: Array.isArray(p.assignments) ? p.assignments : [],
+  }));
+
   function toggleAssignment(personId, value) {
-    const updated = persons.map((p) => {
+    const updated = normalizedPersons.map((p) => {
       if (p.id !== personId) return p;
+
       const exists = p.assignments.includes(value);
+
       return {
         ...p,
         assignments: exists
@@ -12,6 +21,7 @@ export default function Table({ persons, onEdit, onDelete, onUpdate }) {
           : [...p.assignments, value],
       };
     });
+
     onUpdate(updated);
   }
 
@@ -31,7 +41,7 @@ export default function Table({ persons, onEdit, onDelete, onUpdate }) {
         </thead>
 
         <tbody>
-          {persons.length === 0 && (
+          {normalizedPersons.length === 0 && (
             <tr>
               <td
                 colSpan={OPTIONS.length + 2}
@@ -42,7 +52,7 @@ export default function Table({ persons, onEdit, onDelete, onUpdate }) {
             </tr>
           )}
 
-          {persons.map((p) => (
+          {normalizedPersons.map((p) => (
             <tr key={p.id}>
               <td>{p.name}</td>
 
