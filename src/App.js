@@ -6,6 +6,7 @@ import SideMenu from "./components/SideMenu";
 import UserAssignmentPage from "./pages/UserAssignmentPage";
 import ImportPersons from "./pages/ImportPersonsPage";
 import { STORAGE_KEYS } from "./shared/keys/storage.keys";
+import ScheduleMainPage from "./pages/ScheduledMainPage";
 
 export default function App() {
   const [showMenu, setShowMenu] = useState(false);
@@ -62,6 +63,8 @@ export default function App() {
             path="/import-persons"
             element={<ImportPersons persons={persons} onUpdate={setPersons} />}
           />
+
+          <Route path="/schedule" element={<ScheduleMainPage />} />
         </Routes>
       </div>
     </BrowserRouter>

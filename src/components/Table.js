@@ -1,24 +1,34 @@
-const OPTIONS = ["Elder", "MS", "Student", "Bible Reader"];
+import { useMemo, useState } from "react";
+import { ROLES } from "../shared/constants";
 
 export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
-  // Normalize dataset once per render
-  const normalizedPersons = persons.map((p) => ({
-    id: p.id,
-    name: p.name ?? "",
-    assignments: Array.isArray(p.assignments) ? p.assignments : [],
-  }));
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
 
-  function toggleAssignment(personId, value) {
-    const updated = normalizedPersons.map((p) => {
+  const ROLE_LIST = Object.values(ROLES);
+
+  const normalizedPersons = useMemo(() => {
+    return persons
+      .map((p) => ({
+        id: p.id,
+        name: p.name ?? "",
+        roles: Array.isArray(p.roles) ? p.roles : [],
+      }))
+      .filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+      .filter((p) => (roleFilter ? p.roles.includes(roleFilter) : true))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [persons, search, roleFilter]);
+
+  function toggleRole(personId, role) {
+    const updated = persons.map((p) => {
       if (p.id !== personId) return p;
 
-      const exists = p.assignments.includes(value);
+      const roles = Array.isArray(p.roles) ? p.roles : [];
+      const exists = roles.includes(role);
 
       return {
         ...p,
-        assignments: exists
-          ? p.assignments.filter((a) => a !== value)
-          : [...p.assignments, value],
+        roles: exists ? roles.filter((r) => r !== role) : [...roles, role],
       };
     });
 
@@ -27,13 +37,37 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
 
   return (
     <div className="table-responsive">
+      {/* Search + Filter */}
+      <div className="d-flex gap-2 mb-2">
+        <input
+          type="text"
+          className="form-control"
+          placeholder="Search name"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <select
+          className="form-select w-auto"
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+        >
+          <option value="">All Roles</option>
+          {ROLE_LIST.map((role) => (
+            <option key={role} value={role}>
+              {role.replace("_", " ")}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <table className="table table-bordered table-striped align-middle">
         <thead className="table-light">
           <tr>
             <th>Name</th>
-            {OPTIONS.map((o) => (
-              <th key={o} className="text-center">
-                {o}
+            {ROLE_LIST.map((role) => (
+              <th key={role} className="text-center">
+                {role.replace("_", " ")}
               </th>
             ))}
             <th className="text-center">Actions</th>
@@ -44,7 +78,7 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
           {normalizedPersons.length === 0 && (
             <tr>
               <td
-                colSpan={OPTIONS.length + 2}
+                colSpan={ROLE_LIST.length + 2}
                 className="text-center text-muted"
               >
                 No records found
@@ -56,13 +90,13 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
             <tr key={p.id}>
               <td>{p.name}</td>
 
-              {OPTIONS.map((o) => (
-                <td key={o} className="text-center">
+              {ROLE_LIST.map((role) => (
+                <td key={role} className="text-center">
                   <input
-                    className="form-check-input"
                     type="checkbox"
-                    checked={p.assignments.includes(o)}
-                    onChange={() => toggleAssignment(p.id, o)}
+                    className="form-check-input"
+                    checked={p.roles.includes(role)}
+                    onChange={() => toggleRole(p.id, role)}
                   />
                 </td>
               ))}

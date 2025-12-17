@@ -16,6 +16,11 @@ export default function SideMenu({ onNavigate }) {
 
   return (
     <Nav className="flex-column p-2 gap-1">
+      <NavLink to="/schedule" onClick={onNavigate} className={linkClass}>
+        <i className="fas fa-calendar-alt me-2"></i>
+        Meeting Schedule
+      </NavLink>
+
       <NavLink to="/" onClick={onNavigate} className={linkClass}>
         <i className="fas fa-users me-2"></i>
         User Assignment
