@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Offcanvas } from "react-bootstrap";
 import Header from "./components/Header";
 import SideMenu from "./components/SideMenu";
@@ -8,14 +8,16 @@ import ImportPersons from "./pages/ImportPersonsPage";
 import { STORAGE_KEYS } from "./shared/keys/storage.keys";
 import ScheduleMainPage from "./pages/ScheduledMainPage";
 import "./shared/styles/global.styles.css";
-import { listenToast, removeToastListener } from "./shared/services/toast.service";
+import {
+  listenToast,
+  removeToastListener,
+} from "./shared/services/toast.service";
 
 export default function App() {
   const [showMenu, setShowMenu] = useState(false);
   const [persons, setPersons] = useState([]);
   const [hydrated, setHydrated] = useState(false);
 
-  /* ---- GLOBAL TOAST ---- */
   const [toast, setToast] = useState({ show: false, message: "" });
 
   useEffect(() => {
@@ -28,7 +30,6 @@ export default function App() {
     return () => removeToastListener(onToast);
   }, []);
 
-  /* ---- load persons ---- */
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PERSONS);
     if (saved) {
@@ -47,10 +48,9 @@ export default function App() {
   }, [persons, hydrated]);
 
   return (
-    <BrowserRouter>
+    <>
       <Header onToggle={() => setShowMenu(true)} />
 
-      {/* GLOBAL TOAST */}
       {toast.show && (
         <div
           className="toast show position-fixed top-0 end-0 m-3"
@@ -100,6 +100,6 @@ export default function App() {
           <Route path="/schedule" element={<ScheduleMainPage />} />
         </Routes>
       </div>
-    </BrowserRouter>
+    </>
   );
 }
