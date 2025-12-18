@@ -18,6 +18,15 @@ export default function ImportPersons({ persons = [], onUpdate }) {
     setSuccess("");
   }
 
+  function toCamelCaseName(value) {
+    return value
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+
   function handleImport() {
     if (!file) {
       setError("Please select an Excel file.");
@@ -54,7 +63,7 @@ export default function ImportPersons({ persons = [], onUpdate }) {
         }
 
         const names = rows
-          .map((r) => String(r[nameKey]).trim())
+          .map((r) => toCamelCaseName(String(r[nameKey]).trim()))
           .filter(Boolean);
 
         if (!names.length) {

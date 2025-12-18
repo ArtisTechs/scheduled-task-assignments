@@ -1,33 +1,8 @@
 import React from "react";
 import { ROLES } from "../shared/constants/Roles";
+import { MINISTERYO_RULES } from "../shared/constants";
 
 const CBS_KEY = "CBS";
-
-/* =========================
-   MINISTERYO TITLE RULES
-========================= */
-const MINISTERYO_RULES = {
-  "Pagpapasimula ng pakikipagusap": {
-    allowedRoles: [ROLES.STUDENT],
-    maxAssignees: 2,
-  },
-  "Pagdalaw muli": {
-    allowedRoles: [ROLES.STUDENT],
-    maxAssignees: 2,
-  },
-  "Pagawa ng mga Alagad": {
-    allowedRoles: [ROLES.STUDENT],
-    maxAssignees: 2,
-  },
-  "Ipaliwanag ang Paniniwala mo": {
-    allowedRoles: [ROLES.STUDENT],
-    maxAssignees: 2,
-  },
-  Pahayag: {
-    allowedRoles: [ROLES.STUDENT_PAHAYAG],
-    maxAssignees: 1,
-  },
-};
 
 export default function EditableScheduleTable({ schedule, persons, onChange }) {
   /* =========================
@@ -153,9 +128,26 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
 
           return (
             <React.Fragment key={section.key}>
-              <tr className="table-secondary fw-bold">
+              <tr
+                className={`section-header section-${section.key.toLowerCase()}`}
+              >
                 <td colSpan="3">{section.title}</td>
               </tr>
+
+              {section.key === "PAMUMUHAY" && (
+                <tr>
+                  <td colSpan="3">
+                    Awit Blg.&nbsp;
+                    <input
+                      className="form-control d-inline w-auto"
+                      value={schedule.pamumuhaySong}
+                      onChange={(e) =>
+                        update(["pamumuhaySong"], e.target.value)
+                      }
+                    />
+                  </td>
+                </tr>
+              )}
 
               {items.map((item, ii) => (
                 <tr key={item.key}>

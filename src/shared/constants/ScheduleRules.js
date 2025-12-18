@@ -8,6 +8,7 @@ export const SCHEDULE_TEMPLATE = {
   },
 
   openingSong: "",
+  pamumuhaySong: "",
   closingSong: "",
 
   sections: [
@@ -55,6 +56,7 @@ export const SCHEDULE_TEMPLATE = {
       fixed: true,
       rotatableTitles: [
         "Pagpapasimula ng pakikipagusap",
+        "Pakikipag-usap muli",
         "Pagdalaw muli",
         "Pagawa ng mga Alagad",
         "Ipaliwanag ang Paniniwala mo",
@@ -73,6 +75,7 @@ export const SCHEDULE_TEMPLATE = {
           title: "Local na Pangangailangan",
           duration: 15,
           titleEditable: true,
+          durationEditable: true,
           allowedRoles: [ROLES.ELDER, ROLES.MS],
           maxAssignees: 1,
           fixed: false,
@@ -94,5 +97,32 @@ export const SCHEDULE_TEMPLATE = {
     label: "Panalangin",
     allowedRoles: [ROLES.ELDER, ROLES.MS],
     assignee: "",
+  },
+};
+
+export const MINISTERYO_RULES = {
+  "Pagpapasimula ng pakikipagusap": {
+    allowedRoles: [ROLES.STUDENT],
+    maxAssignees: 2,
+  },
+  "Pakikipag-usap muli": {
+    allowedRoles: [ROLES.STUDENT],
+    maxAssignees: 2,
+  },
+  "Pagdalaw muli": {
+    allowedRoles: [ROLES.STUDENT],
+    maxAssignees: 2,
+  },
+  "Pagawa ng mga Alagad": {
+    allowedRoles: [ROLES.STUDENT],
+    maxAssignees: 2,
+  },
+  "Ipaliwanag ang Paniniwala mo": {
+    allowedRoles: [ROLES.STUDENT],
+    maxAssignees: 2,
+  },
+  Pahayag: {
+    allowedRoles: [ROLES.STUDENT_PAHAYAG],
+    maxAssignees: 1,
   },
 };

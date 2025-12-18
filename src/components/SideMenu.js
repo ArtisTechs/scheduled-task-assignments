@@ -21,7 +21,7 @@ export default function SideMenu({ onNavigate }) {
         Meeting Schedule
       </NavLink>
 
-      <NavLink to="/" onClick={onNavigate} className={linkClass}>
+      <NavLink to="/list" onClick={onNavigate} className={linkClass}>
         <i className="fas fa-users me-2"></i>
         User Assignment
       </NavLink>

@@ -7,8 +7,10 @@ import {
   getWeekStart,
   getWeekRange,
   formatDateLong,
+  autoAssignSchedule,
 } from "../shared/services/schedule-assignment.service";
 import { SCHEDULE_TEMPLATE } from "../shared/constants";
+import { showToast } from "../shared/services/toast.service";
 
 /* =======================
    NORMALIZER (CRITICAL)
@@ -52,7 +54,7 @@ export default function ScheduleMainPage() {
   const [persons, setPersons] = useState([]);
   const [schedule, setSchedule] = useState(structuredClone(SCHEDULE_TEMPLATE));
 
-  const [viewMode, setViewMode] = useState(false);
+  const [viewMode, setViewMode] = useState(true);
 
   /* ---- sync week ---- */
   useEffect(() => {
@@ -69,7 +71,8 @@ export default function ScheduleMainPage() {
 
   /* ---- load weekly schedule ---- */
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULE);
+    const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
+
     if (!raw) {
       setSchedule(structuredClone(SCHEDULE_TEMPLATE));
       return;
@@ -85,12 +88,23 @@ export default function ScheduleMainPage() {
 
   /* ---- save ---- */
   function saveSchedule() {
-    const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULE);
+    const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
     const all = raw ? JSON.parse(raw) : {};
 
     all[weekStart] = schedule;
 
-    localStorage.setItem(STORAGE_KEYS.SCHEDULE, JSON.stringify(all));
+    localStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(all));
+    showToast("Schedule saved successfully.");
+  }
+
+  function handleAutoAssign() {
+    const updated = autoAssignSchedule({
+      schedule,
+      persons,
+      weekStart,
+    });
+
+    setSchedule(updated);
   }
 
   return (
@@ -152,9 +166,18 @@ export default function ScheduleMainPage() {
 
       {/* SAVE (EDIT MODE ONLY) */}
       {!viewMode && (
-        <button className="btn btn-primary mt-3" onClick={saveSchedule}>
-          Save Schedule
-        </button>
+        <div className="d-flex gap-2 mt-3">
+          <button
+            className="btn btn-outline-primary"
+            onClick={handleAutoAssign}
+          >
+            Auto Assign
+          </button>
+
+          <button className="btn btn-primary" onClick={saveSchedule}>
+            Save Schedule
+          </button>
+        </div>
       )}
     </div>
   );

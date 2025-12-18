@@ -3,13 +3,15 @@ import React from "react";
 const CBS_KEY = "CBS";
 
 export default function ScheduleTableView({ schedule, persons }) {
+  let partNumber = 1;
+
   function getPersonName(id) {
     return persons.find((p) => p.id === id)?.name || "—";
   }
 
   function getAssigneesText(ids = []) {
     if (!ids.length) return "—";
-    return ids.map(getPersonName).join(", ");
+    return ids.map(getPersonName).join(" / ");
   }
 
   function getPamumuhayItems(section) {
@@ -42,16 +44,27 @@ export default function ScheduleTableView({ schedule, persons }) {
           return (
             <React.Fragment key={section.key}>
               {/* SECTION HEADER */}
-              <tr className="table-secondary fw-bold">
+              <tr
+                className={`section-header section-${section.key.toLowerCase()}`}
+              >
                 <td colSpan="3">{section.title}</td>
               </tr>
+
+              {/* PAMUMUHAY SONG (FIRST, BEFORE PARTS) */}
+              {section.key === "PAMUMUHAY" && (
+                <tr>
+                  <td colSpan="3">Awit Blg. {schedule.pamumuhaySong || "—"}</td>
+                </tr>
+              )}
 
               {/* ITEMS */}
               {items.map((item) => (
                 <tr key={item.key}>
-                  <td>{item.title}</td>
+                  <td>
+                    <strong>{partNumber++}.</strong>&nbsp;{item.title}
+                  </td>
                   <td width="140">{item.duration} min</td>
-                  <td>{getAssigneesText(item.assignees)}</td>
+                  <td className="fw-bold">{getAssigneesText(item.assignees)}</td>
                 </tr>
               ))}
             </React.Fragment>

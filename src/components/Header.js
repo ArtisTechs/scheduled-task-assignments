@@ -5,7 +5,10 @@ export default function Header({ collapsed, onToggle }) {
         ☰
       </button>
 
-      <span className="navbar-brand mb-0 h6">Schedule Assignment System</span>
+      <span className="navbar-brand mb-0 h6 d-flex align-items-center gap-2">
+        <i className="fa-solid fa-business-time"></i>
+        Congregation Scheduler
+      </span>
     </nav>
   );
 }
