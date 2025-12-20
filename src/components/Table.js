@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { ROLES } from "../shared/constants";
+import { updatePerson } from "../shared/services/persons.firestore";
 
 export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [savingId, setSavingId] = useState(null);
 
   const ROLE_LIST = Object.values(ROLES);
 
@@ -19,20 +21,32 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [persons, search, roleFilter]);
 
-  function toggleRole(personId, role) {
-    const updated = persons.map((p) => {
-      if (p.id !== personId) return p;
+  /* ===== ROLE TOGGLE (WRITE-THROUGH) ===== */
+  async function toggleRole(personId, role) {
+    const person = persons.find((p) => p.id === personId);
+    if (!person) return;
 
-      const roles = Array.isArray(p.roles) ? p.roles : [];
-      const exists = roles.includes(role);
+    const roles = Array.isArray(person.roles) ? person.roles : [];
+    const exists = roles.includes(role);
 
-      return {
-        ...p,
-        roles: exists ? roles.filter((r) => r !== role) : [...roles, role],
-      };
-    });
+    const updatedPerson = {
+      ...person,
+      roles: exists ? roles.filter((r) => r !== role) : [...roles, role],
+    };
 
-    onUpdate(updated);
+    try {
+      setSavingId(personId);
+
+      // 🔴 persist to Firestore
+      await updatePerson(personId, updatedPerson);
+
+      // 🔴 replace local data (parent will refetch)
+      onUpdate((prev) =>
+        prev.map((p) => (p.id === personId ? updatedPerson : p))
+      );
+    } finally {
+      setSavingId(null);
+    }
   }
 
   return (
@@ -96,6 +110,7 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
                     type="checkbox"
                     className="form-check-input"
                     checked={p.roles.includes(role)}
+                    disabled={savingId === p.id}
                     onChange={() => toggleRole(p.id, role)}
                   />
                 </td>

@@ -1,16 +1,16 @@
 import React, { useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { STORAGE_KEYS } from "../shared/keys/storage.keys";
 
-function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
+import FullscreenLoader from "../components/FullscreenLoader";
+import { addPersonsBulk } from "../shared/services/persons.firestore";
+import { STORAGE_KEYS } from "../shared/keys/storage.keys";
 
 export default function ImportPersons({ persons = [], onUpdate }) {
   const fileRef = useRef(null);
   const [file, setFile] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
 
   function onFileSelect(e) {
     setFile(e.target.files[0] || null);
@@ -27,15 +27,17 @@ export default function ImportPersons({ persons = [], onUpdate }) {
       .join(" ");
   }
 
-  function handleImport() {
+  async function handleImport() {
     if (!file) {
       setError("Please select an Excel file.");
       return;
     }
 
+    setLoading(true);
+
     const reader = new FileReader();
 
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: "array" });
@@ -78,9 +80,8 @@ export default function ImportPersons({ persons = [], onUpdate }) {
         const newPersons = names
           .filter((n) => !existing.has(n.toLowerCase()))
           .map((name) => ({
-            id: generateId(),
             name,
-            assignments: [],
+            roles: [], // 🔴 aligned with Firestore schema
           }));
 
         if (!newPersons.length) {
@@ -88,17 +89,19 @@ export default function ImportPersons({ persons = [], onUpdate }) {
           return;
         }
 
-        const merged = [...persons, ...newPersons].sort((a, b) =>
-          a.name.localeCompare(b.name)
-        );
+        // 🔴 Persist to Firestore
+        await addPersonsBulk(newPersons);
 
-        localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(merged));
+        // 🔴 Replace local cache + state
+        onUpdate((prev) => {
+          const updated = [...prev, ...newPersons].sort((a, b) =>
+            a.name.localeCompare(b.name)
+          );
+          localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(updated));
+          return updated;
+        });
 
-        if (typeof onUpdate === "function") {
-          onUpdate(merged);
-        }
-
-        // ✅ clear input + state
+        // clear input
         setFile(null);
         if (fileRef.current) fileRef.current.value = "";
 
@@ -107,10 +110,13 @@ export default function ImportPersons({ persons = [], onUpdate }) {
       } catch (err) {
         console.error(err);
         setError(err.message || "Failed to process Excel file.");
+      } finally {
+        setLoading(false);
       }
     };
 
     reader.onerror = () => {
+      setLoading(false);
       setError("Failed to read file.");
     };
 
@@ -118,34 +124,38 @@ export default function ImportPersons({ persons = [], onUpdate }) {
   }
 
   return (
-    <div className="card p-3">
-      <h5 className="mb-3">Import Persons</h5>
+    <>
+      {loading && <FullscreenLoader text="Importing persons…" />}
 
-      {success && <div className="alert alert-success py-2">{success}</div>}
+      <div className="card p-3">
+        <h5 className="mb-3">Import Persons</h5>
 
-      {error && <div className="alert alert-danger py-2">{error}</div>}
+        {success && <div className="alert alert-success py-2">{success}</div>}
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".xlsx,.xls"
-        onChange={onFileSelect}
-        className="form-control mb-3"
-      />
+        {error && <div className="alert alert-danger py-2">{error}</div>}
 
-      <div className="d-flex justify-content-center">
-        <button
-          className="btn btn-primary"
-          onClick={handleImport}
-          disabled={!file}
-        >
-          Import
-        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls"
+          onChange={onFileSelect}
+          className="form-control mb-3"
+        />
+
+        <div className="d-flex justify-content-center">
+          <button
+            className="btn btn-primary"
+            onClick={handleImport}
+            disabled={!file || loading}
+          >
+            Import
+          </button>
+        </div>
+
+        <small className="text-muted d-block mt-2">
+          Excel must contain a column with the word <strong>name</strong>.
+        </small>
       </div>
-
-      <small className="text-muted d-block mt-2">
-        Excel must contain a column with the word <strong>name</strong>.
-      </small>
-    </div>
+    </>
   );
 }
