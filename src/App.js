@@ -41,44 +41,38 @@ export default function App() {
     return () => removeToastListener(onToast);
   }, []);
 
-  /* ===== AUTH + DATA BOOTSTRAP ===== */
+  /* ===== AUTH + ONE-TIME LOCAL CACHE ===== */
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setAuthReady(true);
 
-      if (u) {
-        setBootstrapping(true);
-
-        const cached = localStorage.getItem(STORAGE_KEYS.PERSONS);
-        if (cached) {
-          try {
-            setPersons(JSON.parse(cached));
-            setBootstrapping(false);
-            return;
-          } catch {
-            localStorage.removeItem(STORAGE_KEYS.PERSONS);
-          }
-        }
-
-        const data = await fetchPersons();
-        setPersons(data);
-        localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
-        setBootstrapping(false);
-      } else {
+      if (!u) {
         setPersons([]);
         localStorage.removeItem(STORAGE_KEYS.PERSONS);
         setBootstrapping(false);
+        return;
       }
+
+      setBootstrapping(true);
+
+      const cached = localStorage.getItem(STORAGE_KEYS.PERSONS);
+      if (cached) {
+        try {
+          setPersons(JSON.parse(cached));
+          setBootstrapping(false);
+          return;
+        } catch {
+          localStorage.removeItem(STORAGE_KEYS.PERSONS);
+        }
+      }
+
+      const data = await fetchPersons();
+      setPersons(data);
+      localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
+      setBootstrapping(false);
     });
   }, []);
-
-  /* ===== SYNC LOCAL CACHE ON CHANGE ===== */
-  useEffect(() => {
-    if (user && persons.length) {
-      localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(persons));
-    }
-  }, [persons, user]);
 
   /* ===== FULLSCREEN LOADER ===== */
   if (!authReady || bootstrapping) {

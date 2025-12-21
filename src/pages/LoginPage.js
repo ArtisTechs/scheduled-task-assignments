@@ -43,6 +43,10 @@ export default function LoginPage({ onSuccess }) {
     <div className="vh-100 d-flex align-items-center justify-content-center bg-light">
       <div className="card shadow-sm" style={{ width: 380 }}>
         <div className="card-body p-4">
+          <div className="d-flex align-items-center justify-content-center gap-2 mb-2">
+            <i className="fa-solid fa-business-time fs-5" />
+            <span className="fw-semibold">Congregation Scheduler</span>
+          </div>
           <h4 className="text-center mb-3">Sign in</h4>
 
           {error && <div className="alert alert-danger py-2">{error}</div>}

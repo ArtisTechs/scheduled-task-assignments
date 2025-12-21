@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import EditableScheduleTable from "../components/EditableScheduleTable";
 import ScheduleTableView from "../components/ScheduleTableView";
+import FullscreenLoader from "../components/FullscreenLoader";
+
 import { STORAGE_KEYS } from "../shared/keys/storage.keys";
 import {
   addDays,
@@ -11,6 +13,11 @@ import {
 } from "../shared/services/schedule-assignment.service";
 import { SCHEDULE_TEMPLATE } from "../shared/constants";
 import { showToast } from "../shared/services/toast.service";
+
+import {
+  fetchAllSchedulesAndCache,
+  saveWeeklySchedule,
+} from "../shared/services/schedule.firestore";
 
 /* =======================
    NORMALIZER (CRITICAL)
@@ -55,6 +62,7 @@ export default function ScheduleMainPage() {
   const [schedule, setSchedule] = useState(structuredClone(SCHEDULE_TEMPLATE));
 
   const [viewMode, setViewMode] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   /* ---- sync week ---- */
   useEffect(() => {
@@ -63,38 +71,58 @@ export default function ScheduleMainPage() {
     setWeekRange(getWeekRange(ws));
   }, [selectedDate]);
 
-  /* ---- load persons ---- */
+  /* ---- load persons (local only) ---- */
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEYS.PERSONS);
     if (raw) setPersons(JSON.parse(raw));
   }, []);
 
-  /* ---- load weekly schedule ---- */
+  /* ---- fetch ALL schedules once, then read weekly ---- */
+  useEffect(() => {
+    async function load() {
+      const all = await fetchAllSchedulesAndCache();
+      const weekly = all[weekStart];
+
+      setSchedule(
+        weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
+      );
+    }
+
+    load();
+  }, []);
+
+  /* ---- update week from local cache only ---- */
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
-
     if (!raw) {
       setSchedule(structuredClone(SCHEDULE_TEMPLATE));
       return;
     }
 
     const all = JSON.parse(raw);
-    const loaded = all[weekStart];
+    const weekly = all[weekStart];
 
     setSchedule(
-      loaded ? normalizeSchedule(loaded) : structuredClone(SCHEDULE_TEMPLATE)
+      weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
     );
   }, [weekStart]);
 
   /* ---- save ---- */
-  function saveSchedule() {
-    const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
-    const all = raw ? JSON.parse(raw) : {};
+  async function saveSchedule() {
+    setSaving(true);
+    try {
+      await saveWeeklySchedule(weekStart, schedule);
 
-    all[weekStart] = schedule;
+      const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
+      const all = raw ? JSON.parse(raw) : {};
+      all[weekStart] = schedule;
 
-    localStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(all));
-    showToast("Schedule saved successfully.");
+      localStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(all));
+
+      showToast("Schedule saved successfully.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleAutoAssign() {
@@ -108,77 +136,88 @@ export default function ScheduleMainPage() {
   }
 
   return (
-    <div className="container mt-3">
-      {/* WEEK NAV */}
-      <div className="d-flex align-items-center gap-2 mb-2">
-        <button
-          className="btn btn-outline-secondary"
-          onClick={() => setSelectedDate((d) => addDays(d, -7))}
-        >
-          ‹
-        </button>
+    <>
+      {saving && <FullscreenLoader text="Saving schedule…" />}
 
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="form-control w-auto"
-        />
-
-        <button
-          className="btn btn-outline-secondary"
-          onClick={() => setSelectedDate((d) => addDays(d, 7))}
-        >
-          ›
-        </button>
-      </div>
-
-      {/* WEEK RANGE */}
-      <div className="alert alert-light border fw-semibold mb-2">
-        Week:&nbsp;
-        <span className="fw-bold fs-5">{formatDateLong(weekRange.start)}</span>
-        &nbsp;–&nbsp;
-        <span className="fw-bold fs-5">{formatDateLong(weekRange.end)}</span>
-      </div>
-
-      {/* MODE TOGGLE */}
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <strong>{viewMode ? "View Mode" : "Edit Mode"}</strong>
-
-        <button
-          className="btn btn-sm btn-outline-secondary"
-          onClick={() => setViewMode((v) => !v)}
-        >
-          {viewMode ? "Switch to Edit" : "Switch to View"}
-        </button>
-      </div>
-
-      {/* TABLE */}
-      {viewMode ? (
-        <ScheduleTableView schedule={schedule} persons={persons} />
-      ) : (
-        <EditableScheduleTable
-          schedule={schedule}
-          persons={persons}
-          onChange={setSchedule}
-        />
-      )}
-
-      {/* SAVE (EDIT MODE ONLY) */}
-      {!viewMode && (
-        <div className="d-flex gap-2 mt-3">
+      <div className="container mt-3">
+        {/* WEEK NAV */}
+        <div className="d-flex align-items-center gap-2 mb-2">
           <button
-            className="btn btn-outline-primary"
-            onClick={handleAutoAssign}
+            className="btn btn-outline-secondary"
+            onClick={() => setSelectedDate((d) => addDays(d, -7))}
           >
-            Auto Assign
+            ‹
           </button>
 
-          <button className="btn btn-primary" onClick={saveSchedule}>
-            Save Schedule
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="form-control w-auto"
+          />
+
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => setSelectedDate((d) => addDays(d, 7))}
+          >
+            ›
           </button>
         </div>
-      )}
-    </div>
+
+        {/* WEEK RANGE */}
+        <div className="alert alert-light border fw-semibold mb-2">
+          Week:&nbsp;
+          <span className="fw-bold fs-5">
+            {formatDateLong(weekRange.start)}
+          </span>
+          &nbsp;–&nbsp;
+          <span className="fw-bold fs-5">{formatDateLong(weekRange.end)}</span>
+        </div>
+
+        {/* MODE TOGGLE */}
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <strong>{viewMode ? "View Mode" : "Edit Mode"}</strong>
+
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => setViewMode((v) => !v)}
+          >
+            {viewMode ? "Switch to Edit" : "Switch to View"}
+          </button>
+        </div>
+
+        {/* TABLE */}
+        {viewMode ? (
+          <ScheduleTableView schedule={schedule} persons={persons} />
+        ) : (
+          <EditableScheduleTable
+            schedule={schedule}
+            persons={persons}
+            onChange={setSchedule}
+          />
+        )}
+
+        {/* SAVE */}
+        {!viewMode && (
+          <div className="d-flex gap-2 mt-3">
+            <button
+              className="btn btn-outline-primary"
+              onClick={handleAutoAssign}
+              disabled={saving}
+            >
+              Auto Assign
+            </button>
+
+            <button
+              className="btn btn-primary"
+              onClick={saveSchedule}
+              disabled={saving}
+            >
+              Save Schedule
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

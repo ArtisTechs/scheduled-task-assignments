@@ -3,7 +3,6 @@ import * as XLSX from "xlsx";
 
 import FullscreenLoader from "../components/FullscreenLoader";
 import { addPersonsBulk } from "../shared/services/persons.firestore";
-import { STORAGE_KEYS } from "../shared/keys/storage.keys";
 
 export default function ImportPersons({ persons = [], onUpdate }) {
   const fileRef = useRef(null);
@@ -81,7 +80,7 @@ export default function ImportPersons({ persons = [], onUpdate }) {
           .filter((n) => !existing.has(n.toLowerCase()))
           .map((name) => ({
             name,
-            roles: [], // 🔴 aligned with Firestore schema
+            roles: [], // Firestore schema
           }));
 
         if (!newPersons.length) {
@@ -89,19 +88,12 @@ export default function ImportPersons({ persons = [], onUpdate }) {
           return;
         }
 
-        // 🔴 Persist to Firestore
         await addPersonsBulk(newPersons);
 
-        // 🔴 Replace local cache + state
-        onUpdate((prev) => {
-          const updated = [...prev, ...newPersons].sort((a, b) =>
-            a.name.localeCompare(b.name)
-          );
-          localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(updated));
-          return updated;
-        });
+        onUpdate((prev) =>
+          [...prev, ...newPersons].sort((a, b) => a.name.localeCompare(b.name))
+        );
 
-        // clear input
         setFile(null);
         if (fileRef.current) fileRef.current.value = "";
 

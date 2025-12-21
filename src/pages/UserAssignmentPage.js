@@ -17,36 +17,31 @@ export default function UserAssignmentPage({ persons, onUpdate }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* ===== RELOAD FROM FIRESTORE (REPLACE ONLY) ===== */
-  async function reloadPersons() {
-    setLoading(true);
-
-    const data = await fetchPersons();
-
-    // replace state
-    onUpdate(data);
-
-    // replace local cache
-    localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
-
-    setLoading(false);
-  }
-
-  /* ===== INITIAL LOAD (FROM CACHE OR FIRESTORE) ===== */
+  /* ===== ALWAYS FETCH + SAVE ON PAGE ENTRY ===== */
   useEffect(() => {
-    if (persons.length) return;
+    let mounted = true;
 
-    const cached = localStorage.getItem(STORAGE_KEYS.PERSONS);
-    if (cached) {
+    async function loadAndCache() {
+      setLoading(true);
       try {
-        onUpdate(JSON.parse(cached));
-        return;
-      } catch {
-        localStorage.removeItem(STORAGE_KEYS.PERSONS);
+        const data = await fetchPersons();
+        if (!mounted) return;
+
+        // replace global state
+        onUpdate(data);
+
+        // replace local cache (authoritative snapshot)
+        localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
 
-    reloadPersons();
+    loadAndCache();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   function isDuplicateName(name, ignoreId = null) {
@@ -65,7 +60,13 @@ export default function UserAssignmentPage({ persons, onUpdate }) {
 
     setLoading(true);
     await addPersonFS(person);
-    await reloadPersons();
+
+    // re-fetch + re-cache
+    const data = await fetchPersons();
+    onUpdate(data);
+    localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
+
+    setLoading(false);
     setError("");
   }
 
@@ -78,7 +79,13 @@ export default function UserAssignmentPage({ persons, onUpdate }) {
 
     setLoading(true);
     await updatePersonFS(updatedPerson.id, updatedPerson);
-    await reloadPersons();
+
+    // re-fetch + re-cache
+    const data = await fetchPersons();
+    onUpdate(data);
+    localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
+
+    setLoading(false);
     setEditing(null);
     setError("");
   }
@@ -87,7 +94,13 @@ export default function UserAssignmentPage({ persons, onUpdate }) {
   async function deletePerson(id) {
     setLoading(true);
     await deletePersonById(id);
-    await reloadPersons();
+
+    // re-fetch + re-cache
+    const data = await fetchPersons();
+    onUpdate(data);
+    localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
+
+    setLoading(false);
   }
 
   return (

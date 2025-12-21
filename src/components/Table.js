@@ -9,24 +9,30 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
 
   const ROLE_LIST = Object.values(ROLES);
 
+  /* =========================
+     NORMALIZATION (READ-ONLY)
+  ========================= */
   const normalizedPersons = useMemo(() => {
     return persons
       .map((p) => ({
         id: p.id,
         name: p.name ?? "",
-        roles: Array.isArray(p.roles) ? p.roles : [],
+        roles: Array.isArray(p.roles) ? [...p.roles] : [], // CLONE
       }))
       .filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
       .filter((p) => (roleFilter ? p.roles.includes(roleFilter) : true))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [persons, search, roleFilter]);
 
-  /* ===== ROLE TOGGLE (WRITE-THROUGH) ===== */
+  /* =========================
+     ROLE TOGGLE (WRITE-THROUGH)
+  ========================= */
   async function toggleRole(personId, role) {
     const person = persons.find((p) => p.id === personId);
     if (!person) return;
 
-    const roles = Array.isArray(person.roles) ? person.roles : [];
+    // 🔒 ALWAYS CLONE
+    const roles = Array.isArray(person.roles) ? [...person.roles] : [];
     const exists = roles.includes(role);
 
     const updatedPerson = {
@@ -37,10 +43,10 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
     try {
       setSavingId(personId);
 
-      // 🔴 persist to Firestore
+      // Persist to Firestore
       await updatePerson(personId, updatedPerson);
 
-      // 🔴 replace local data (parent will refetch)
+      // Replace only the updated row
       onUpdate((prev) =>
         prev.map((p) => (p.id === personId ? updatedPerson : p))
       );
