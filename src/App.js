@@ -5,6 +5,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 
 import { auth } from "./firebase";
 import { fetchPersons } from "./shared/services/persons.firestore";
+import { fetchAllSchedulesAndCache } from "./shared/services/schedule.firestore";
 import { STORAGE_KEYS } from "./shared/keys/storage.keys";
 
 import Header from "./components/Header";
@@ -41,7 +42,7 @@ export default function App() {
     return () => removeToastListener(onToast);
   }, []);
 
-  /* ===== AUTH + ONE-TIME LOCAL CACHE ===== */
+  /* ===== AUTH + INITIAL DATA BOOTSTRAP ===== */
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
@@ -50,26 +51,30 @@ export default function App() {
       if (!u) {
         setPersons([]);
         localStorage.removeItem(STORAGE_KEYS.PERSONS);
+        localStorage.removeItem(STORAGE_KEYS.SCHEDULES);
         setBootstrapping(false);
         return;
       }
 
       setBootstrapping(true);
 
-      const cached = localStorage.getItem(STORAGE_KEYS.PERSONS);
-      if (cached) {
+      /* ---- PERSONS (cache-first) ---- */
+      const cachedPersons = localStorage.getItem(STORAGE_KEYS.PERSONS);
+      if (cachedPersons) {
         try {
-          setPersons(JSON.parse(cached));
-          setBootstrapping(false);
-          return;
+          setPersons(JSON.parse(cachedPersons));
         } catch {
           localStorage.removeItem(STORAGE_KEYS.PERSONS);
         }
+      } else {
+        const personsData = await fetchPersons();
+        setPersons(personsData);
+        localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(personsData));
       }
 
-      const data = await fetchPersons();
-      setPersons(data);
-      localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
+      /* ---- SCHEDULES (always fetch once) ---- */
+      await fetchAllSchedulesAndCache();
+
       setBootstrapping(false);
     });
   }, []);
