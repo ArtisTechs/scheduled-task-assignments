@@ -1,10 +1,69 @@
 import React from "react";
 import { ROLES } from "../shared/constants/Roles";
 import { MINISTERYO_RULES } from "../shared/constants";
+import { STORAGE_KEYS } from "../shared/keys/storage.keys";
 
 const CBS_KEY = "CBS";
 
-export default function EditableScheduleTable({ schedule, persons, onChange }) {
+/* =========================
+   RESTRICTED ROLES (4-WEEK RULE)
+========================= */
+const RESTRICTED_ROLES = [
+  ROLES.STUDENT,
+  ROLES.BIBLE_READER,
+];
+
+/* =========================
+   WEEK HELPERS
+========================= */
+function getPreviousWeekKeys(weekStart, count = 5) {
+  if (!weekStart) return [];
+
+  const base = new Date(weekStart);
+  if (isNaN(base.getTime())) return [];
+
+  const weeks = [];
+
+  for (let i = 1; i <= count; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() - i * 7);
+    weeks.push(d.toISOString().substring(0, 10));
+  }
+
+  return weeks;
+}
+
+function getRecentlyAssignedPersonIds(weekStart) {
+  const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
+  if (!raw) return new Set();
+
+  const all = JSON.parse(raw);
+  const prevWeeks = getPreviousWeekKeys(weekStart);
+  const used = new Set();
+
+  prevWeeks.forEach((wk) => {
+    const sched = all[wk];
+    if (!sched) return;
+
+    sched.sections?.forEach((sec) => {
+      sec.items?.forEach((item) => {
+        item.assignees?.forEach((id) => used.add(id));
+      });
+    });
+
+    if (sched.chairman?.assignee) used.add(sched.chairman.assignee);
+    if (sched.prayer?.assignee) used.add(sched.prayer.assignee);
+  });
+
+  return used;
+}
+
+export default function EditableScheduleTable({
+  schedule,
+  persons,
+  weekStart,
+  onChange,
+}) {
   /* =========================
      HELPERS
   ========================= */
@@ -12,10 +71,22 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
     return JSON.parse(JSON.stringify(schedule));
   }
 
-  function eligiblePersons(allowedRoles) {
-    return persons.filter((p) =>
-      p.roles?.some((r) => allowedRoles.includes(r))
-    );
+  function eligiblePersons(allowedRoles, currentAssignees = []) {
+    const recentlyUsed = getRecentlyAssignedPersonIds(weekStart);
+
+    return persons.filter((p) => {
+      if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
+
+      const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
+
+      // keep already saved assignees
+      if (currentAssignees.includes(p.id)) return true;
+
+      // apply restriction only to selected roles
+      if (isRestricted && recentlyUsed.has(p.id)) return false;
+
+      return true;
+    });
   }
 
   function update(path, value) {
@@ -98,7 +169,9 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
               onChange={(e) => update(["chairman", "assignee"], e.target.value)}
             >
               <option value="">—</option>
-              {eligiblePersons(schedule.chairman.allowedRoles).map((p) => (
+              {eligiblePersons(schedule.chairman.allowedRoles, [
+                schedule.chairman.assignee,
+              ]).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -211,7 +284,6 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
                     )}
                   </td>
 
-                  {/* ASSIGNEES (SLOT-BASED) */}
                   <td>
                     {Array.from({ length: item.maxAssignees }).map(
                       (_, slotIndex) => (
@@ -220,9 +292,8 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
                           className="form-select mb-1"
                           value={item.assignees?.[slotIndex] || ""}
                           onChange={(e) => {
-                            const value = e.target.value;
                             const updated = [...(item.assignees || [])];
-                            updated[slotIndex] = value;
+                            updated[slotIndex] = e.target.value;
 
                             update(
                               ["sections", si, "items", ii, "assignees"],
@@ -231,7 +302,10 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
                           }}
                         >
                           <option value="">Select person</option>
-                          {eligiblePersons(item.allowedRoles).map((p) => (
+                          {eligiblePersons(
+                            item.allowedRoles,
+                            item.assignees || []
+                          ).map((p) => (
                             <option
                               key={p.id}
                               value={p.id}
@@ -244,7 +318,7 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
                       )
                     )}
 
-                    {!item.fixed && item.key !== CBS_KEY && (
+                    {!item.fixed && (
                       <button
                         className="btn btn-sm btn-outline-danger mt-1"
                         onClick={() => removeItem(si, ii)}
@@ -308,7 +382,9 @@ export default function EditableScheduleTable({ schedule, persons, onChange }) {
               onChange={(e) => update(["prayer", "assignee"], e.target.value)}
             >
               <option value="">—</option>
-              {eligiblePersons(schedule.prayer.allowedRoles).map((p) => (
+              {eligiblePersons(schedule.prayer.allowedRoles, [
+                schedule.prayer.assignee,
+              ]).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>

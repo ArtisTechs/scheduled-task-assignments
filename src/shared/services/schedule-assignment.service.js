@@ -1,6 +1,12 @@
 import { MINISTERYO_RULES, ROLES } from "../constants";
 import { STORAGE_KEYS } from "../keys/storage.keys";
 
+const RESTRICTED_ROLES = [
+  ROLES.STUDENT,
+  ROLES.STUDENT_PAHAYAG,
+  ROLES.BIBLE_READER,
+];
+
 // scheduleAssignmentService.js
 export function canAssign(personId, date, assignments) {
   return !assignments[date]?.includes(personId);
@@ -73,14 +79,27 @@ function getAllSchedules() {
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.SCHEDULES) || "{}");
 }
 
-function getRecentAssignments(personId, currentWeekStart, weeks = 4) {
-  const all = getAllSchedules();
-  const dates = Object.keys(all).sort().reverse();
+function getRecentAssignments(personId, currentWeekStart, weeks = 5) {
+  if (!currentWeekStart) return false;
 
-  return dates
+  const all = getAllSchedules();
+  const dates = Object.keys(all)
     .filter((d) => d < currentWeekStart)
-    .slice(0, weeks)
-    .some((week) => JSON.stringify(all[week]).includes(personId));
+    .sort()
+    .reverse()
+    .slice(0, weeks);
+
+  return dates.some((week) => {
+    const sched = all[week];
+    if (!sched) return false;
+
+    if (sched.chairman?.assignee === personId) return true;
+    if (sched.prayer?.assignee === personId) return true;
+
+    return sched.sections?.some((s) =>
+      s.items?.some((i) => i.assignees?.includes(personId))
+    );
+  });
 }
 
 function collectUsedThisWeek(schedule) {
@@ -105,14 +124,20 @@ export function autoAssignSchedule({ schedule, persons, weekStart }) {
       if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
       if (usedThisWeek.has(p.id)) return false;
 
-      // STUDENT / BIBLE READER: 4-week exclusion
-      if (!p.roles.includes("ELDER") && !p.roles.includes("MS")) {
+      const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
+
+      // Apply 4-week rule ONLY to restricted roles
+      if (isRestricted) {
         return !getRecentAssignments(p.id, weekStart);
       }
 
-      // ELDER / MS: rotate by part
-      const recentParts = getRecentParts(p.id, weekStart);
-      return !recentParts.has(partKey);
+      // Existing ELDER / MS rotation stays intact
+      if (p.roles.includes(ROLES.ELDER) || p.roles.includes(ROLES.MS)) {
+        const recentParts = getRecentParts(p.id, weekStart);
+        return !recentParts.has(partKey);
+      }
+
+      return true;
     });
 
     /* ---- SINGLE ASSIGNEE ---- */
@@ -173,10 +198,14 @@ export function autoAssignSchedule({ schedule, persons, weekStart }) {
         item.key || item.title
       );
 
-      item.assignees = candidates.map((p) => {
-        usedThisWeek.add(p.id);
-        return p.id;
-      });
+      if (candidates.length > 0) {
+        item.assignees = candidates.map((p) => {
+          usedThisWeek.add(p.id);
+          return p.id;
+        });
+      } else {
+        item.assignees = item.assignees || [];
+      }
     });
   });
 

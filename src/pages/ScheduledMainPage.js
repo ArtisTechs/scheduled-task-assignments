@@ -71,13 +71,11 @@ export default function ScheduleMainPage() {
     setWeekRange(getWeekRange(ws));
   }, [selectedDate]);
 
-  /* ---- load persons (local only) ---- */
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEYS.PERSONS);
     if (raw) setPersons(JSON.parse(raw));
   }, []);
 
-  /* ---- fetch ALL schedules once, then read weekly ---- */
   useEffect(() => {
     async function load() {
       const all = await fetchAllSchedulesAndCache();
@@ -91,7 +89,6 @@ export default function ScheduleMainPage() {
     load();
   }, []);
 
-  /* ---- update week from local cache only ---- */
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
     if (!raw) {
@@ -193,6 +190,7 @@ export default function ScheduleMainPage() {
           <EditableScheduleTable
             schedule={schedule}
             persons={persons}
+            weekStart={weekStart} 
             onChange={setSchedule}
           />
         )}
