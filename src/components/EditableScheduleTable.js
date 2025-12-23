@@ -8,10 +8,7 @@ const CBS_KEY = "CBS";
 /* =========================
    RESTRICTED ROLES (4-WEEK RULE)
 ========================= */
-const RESTRICTED_ROLES = [
-  ROLES.STUDENT,
-  ROLES.BIBLE_READER,
-];
+const RESTRICTED_ROLES = [ROLES.STUDENT, ROLES.BIBLE_READER];
 
 /* =========================
    WEEK HELPERS
@@ -71,18 +68,45 @@ export default function EditableScheduleTable({
     return JSON.parse(JSON.stringify(schedule));
   }
 
-  function eligiblePersons(allowedRoles, currentAssignees = []) {
+  function collectUsedThisScheduleExceptChairman(sched) {
+    const used = new Set();
+
+    if (!sched) return used;
+
+    if (!Array.isArray(sched.sections)) {
+      return used;
+    }
+
+    sched.sections.forEach((s) => {
+      if (!Array.isArray(s.items)) return;
+
+      s.items.forEach((i) => {
+        if (!Array.isArray(i.assignees)) return;
+        i.assignees.forEach((id) => used.add(id));
+      });
+    });
+
+    return used;
+  }
+
+  function eligiblePersons(
+    sched,
+    allowedRoles,
+    currentAssignees = [],
+    allowReuse = false
+  ) {
     const recentlyUsed = getRecentlyAssignedPersonIds(weekStart);
+    const usedThisSchedule = collectUsedThisScheduleExceptChairman(sched);
 
     return persons.filter((p) => {
       if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
 
-      const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
-
-      // keep already saved assignees
       if (currentAssignees.includes(p.id)) return true;
 
-      // apply restriction only to selected roles
+      if (!allowReuse && usedThisSchedule.has(p.id)) return false;
+
+      const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
+
       if (isRestricted && recentlyUsed.has(p.id)) return false;
 
       return true;
@@ -169,9 +193,12 @@ export default function EditableScheduleTable({
               onChange={(e) => update(["chairman", "assignee"], e.target.value)}
             >
               <option value="">—</option>
-              {eligiblePersons(schedule.chairman.allowedRoles, [
-                schedule.chairman.assignee,
-              ]).map((p) => (
+              {eligiblePersons(
+                schedule,
+                schedule.chairman.allowedRoles,
+                [schedule.chairman.assignee],
+                true
+              ).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -303,14 +330,11 @@ export default function EditableScheduleTable({
                         >
                           <option value="">Select person</option>
                           {eligiblePersons(
+                            schedule,
                             item.allowedRoles,
                             item.assignees || []
                           ).map((p) => (
-                            <option
-                              key={p.id}
-                              value={p.id}
-                              disabled={item.assignees?.includes(p.id)}
-                            >
+                            <option key={p.id} value={p.id}>
                               {p.name}
                             </option>
                           ))}
@@ -382,9 +406,12 @@ export default function EditableScheduleTable({
               onChange={(e) => update(["prayer", "assignee"], e.target.value)}
             >
               <option value="">—</option>
-              {eligiblePersons(schedule.prayer.allowedRoles, [
-                schedule.prayer.assignee,
-              ]).map((p) => (
+              {eligiblePersons(
+                schedule,
+                schedule.prayer.allowedRoles,
+                [schedule.prayer.assignee],
+                true
+              ).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
