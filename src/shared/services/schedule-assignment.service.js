@@ -1,4 +1,5 @@
 import { MINISTERYO_RULES, ROLES } from "../constants";
+import { APP_SETTINGS } from "../constants/Settings";
 import { STORAGE_KEYS } from "../keys/storage.keys";
 
 const RESTRICTED_ROLES = [
@@ -79,7 +80,11 @@ function getAllSchedules() {
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.SCHEDULES) || "{}");
 }
 
-function getRecentAssignments(personId, currentWeekStart, weeks = 5) {
+function getRecentAssignments(
+  personId,
+  currentWeekStart,
+  weeks = APP_SETTINGS.assignmentRules.excludeIfAssignedWithinWeeks
+) {
   if (!currentWeekStart) return false;
 
   const all = getAllSchedules();

@@ -2,6 +2,7 @@ import React from "react";
 import { ROLES } from "../shared/constants/Roles";
 import { MINISTERYO_RULES } from "../shared/constants";
 import { STORAGE_KEYS } from "../shared/keys/storage.keys";
+import { APP_SETTINGS } from "../shared/constants/Settings";
 
 const CBS_KEY = "CBS";
 
@@ -13,7 +14,10 @@ const RESTRICTED_ROLES = [ROLES.STUDENT, ROLES.BIBLE_READER];
 /* =========================
    WEEK HELPERS
 ========================= */
-function getPreviousWeekKeys(weekStart, count = 5) {
+function getPreviousWeekKeys(
+  weekStart,
+  count = APP_SETTINGS.assignmentRules.excludeIfAssignedWithinWeeks
+) {
   if (!weekStart) return [];
 
   const base = new Date(weekStart);

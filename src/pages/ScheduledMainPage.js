@@ -18,6 +18,7 @@ import {
   fetchAllSchedulesAndCache,
   saveWeeklySchedule,
 } from "../shared/services/schedule.firestore";
+import { fetchPersons } from "../shared/services/persons.firestore";
 
 /* =======================
    NORMALIZER (CRITICAL)
@@ -51,7 +52,7 @@ function normalizeSchedule(loaded) {
   };
 }
 
-export default function ScheduleMainPage() {
+export default function ScheduleMainPage({ viewOnly = false }) {
   const today = new Date().toISOString().substring(0, 10);
 
   const [selectedDate, setSelectedDate] = useState(today);
@@ -61,21 +62,37 @@ export default function ScheduleMainPage() {
   const [persons, setPersons] = useState([]);
   const [schedule, setSchedule] = useState(structuredClone(SCHEDULE_TEMPLATE));
 
-  const [viewMode, setViewMode] = useState(true);
+  const [viewMode, setViewMode] = useState(viewOnly);
   const [saving, setSaving] = useState(false);
 
-  /* ---- sync week ---- */
+  /* ---- WEEK SYNC ---- */
   useEffect(() => {
     const ws = getWeekStart(selectedDate);
     setWeekStart(ws);
     setWeekRange(getWeekRange(ws));
   }, [selectedDate]);
 
+  /* ---- PERSONS ---- */
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.PERSONS);
-    if (raw) setPersons(JSON.parse(raw));
-  }, []);
+    async function loadPersons() {
+      const raw = localStorage.getItem(STORAGE_KEYS.PERSONS);
 
+      if (raw) {
+        setPersons(JSON.parse(raw));
+        return;
+      }
+
+      if (viewOnly) {
+        const personsData = await fetchPersons();
+        setPersons(personsData);
+        localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(personsData));
+      }
+    }
+
+    loadPersons();
+  }, [viewOnly]);
+
+  /* ---- SCHEDULE LOAD ---- */
   useEffect(() => {
     async function load() {
       const all = await fetchAllSchedulesAndCache();
@@ -85,7 +102,6 @@ export default function ScheduleMainPage() {
         weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
       );
     }
-
     load();
   }, []);
 
@@ -104,18 +120,12 @@ export default function ScheduleMainPage() {
     );
   }, [weekStart]);
 
-  /* ---- save ---- */
   async function saveSchedule() {
+    if (viewOnly) return;
+
     setSaving(true);
     try {
       await saveWeeklySchedule(weekStart, schedule);
-
-      const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
-      const all = raw ? JSON.parse(raw) : {};
-      all[weekStart] = schedule;
-
-      localStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(all));
-
       showToast("Schedule saved successfully.");
     } finally {
       setSaving(false);
@@ -123,6 +133,8 @@ export default function ScheduleMainPage() {
   }
 
   function handleAutoAssign() {
+    if (viewOnly) return;
+
     const updated = autoAssignSchedule({
       schedule,
       persons,
@@ -171,16 +183,18 @@ export default function ScheduleMainPage() {
           <span className="fw-bold fs-5">{formatDateLong(weekRange.end)}</span>
         </div>
 
-        {/* MODE TOGGLE */}
+        {/* MODE LABEL */}
         <div className="d-flex justify-content-between align-items-center mb-2">
           <strong>{viewMode ? "View Mode" : "Edit Mode"}</strong>
 
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => setViewMode((v) => !v)}
-          >
-            {viewMode ? "Switch to Edit" : "Switch to View"}
-          </button>
+          {!viewOnly && (
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => setViewMode((v) => !v)}
+            >
+              {viewMode ? "Switch to Edit" : "Switch to View"}
+            </button>
+          )}
         </div>
 
         {/* TABLE */}
@@ -190,27 +204,22 @@ export default function ScheduleMainPage() {
           <EditableScheduleTable
             schedule={schedule}
             persons={persons}
-            weekStart={weekStart} 
+            weekStart={weekStart}
             onChange={setSchedule}
           />
         )}
 
-        {/* SAVE */}
-        {!viewMode && (
+        {/* ACTIONS */}
+        {!viewMode && !viewOnly && (
           <div className="d-flex gap-2 mt-3">
             <button
               className="btn btn-outline-primary"
               onClick={handleAutoAssign}
-              disabled={saving}
             >
               Auto Assign
             </button>
 
-            <button
-              className="btn btn-primary"
-              onClick={saveSchedule}
-              disabled={saving}
-            >
+            <button className="btn btn-primary" onClick={saveSchedule}>
               Save Schedule
             </button>
           </div>

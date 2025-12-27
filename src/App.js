@@ -174,6 +174,11 @@ export default function App() {
           />
 
           <Route
+            path="/schedule-view"
+            element={<ScheduleMainPage viewOnly />}
+          />
+
+          <Route
             path="*"
             element={<Navigate to={user ? "/schedule" : "/login"} replace />}
           />
