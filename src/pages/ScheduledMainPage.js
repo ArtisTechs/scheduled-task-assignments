@@ -62,7 +62,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
   const [persons, setPersons] = useState([]);
   const [schedule, setSchedule] = useState(structuredClone(SCHEDULE_TEMPLATE));
 
-  const [viewMode, setViewMode] = useState(viewOnly);
+  const [viewMode, setViewMode] = useState(true);
   const [saving, setSaving] = useState(false);
 
   /* ---- WEEK SYNC ---- */
@@ -185,7 +185,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
 
         {/* MODE LABEL */}
         <div className="d-flex justify-content-between align-items-center mb-2">
-          <strong>{viewMode ? "View Mode" : "Edit Mode"}</strong>
+          <strong>{viewMode ? "" : "Edit Mode"}</strong>
 
           {!viewOnly && (
             <button
