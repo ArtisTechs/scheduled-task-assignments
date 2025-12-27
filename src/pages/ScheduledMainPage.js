@@ -174,7 +174,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         </div>
 
         {/* WEEK RANGE */}
-        <div className="alert alert-light border fw-semibold mb-2">
+        <div className="alert alert-light border fw-semibold mb-2 week-range">
           Week:&nbsp;
           <span className="fw-bold fs-5">
             {formatDateLong(weekRange.start)}
