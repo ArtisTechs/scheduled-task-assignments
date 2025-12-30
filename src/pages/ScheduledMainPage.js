@@ -126,6 +126,16 @@ export default function ScheduleMainPage({ viewOnly = false }) {
     setSaving(true);
     try {
       await saveWeeklySchedule(weekStart, schedule);
+
+      const all = await fetchAllSchedulesAndCache();
+
+      localStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(all));
+
+      const weekly = all[weekStart];
+      setSchedule(
+        weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
+      );
+
       showToast("Schedule saved successfully.");
     } finally {
       setSaving(false);
