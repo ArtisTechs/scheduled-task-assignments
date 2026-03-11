@@ -47,6 +47,15 @@ export default function SideMenu({ onNavigate }) {
         Congregation Persons
       </NavLink>
 
+      <NavLink
+        to="/field-service-reports"
+        onClick={onNavigate}
+        className={linkClass}
+      >
+        <i className="fas fa-clipboard-list me-2"></i>
+        Field Service Reports
+      </NavLink>
+
       <div className="flex-grow-1"></div>
 
       {/* SIGN OUT */}

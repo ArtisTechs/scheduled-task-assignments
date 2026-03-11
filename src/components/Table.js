@@ -1,6 +1,26 @@
-import { useMemo, useState } from "react";
+import { forwardRef, useMemo, useState } from "react";
+import { Dropdown } from "react-bootstrap";
 import { ROLES } from "../shared/constants";
 import { updatePerson } from "../shared/services/persons.firestore";
+
+const KebabToggle = forwardRef(function KebabToggle({ onClick }, ref) {
+  return (
+    <button
+      type="button"
+      className="btn btn-link text-dark p-0 border-0 shadow-none"
+      ref={ref}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onClick(e);
+      }}
+      aria-label="Row actions"
+      title="Actions"
+    >
+      <i className="fas fa-ellipsis-v"></i>
+    </button>
+  );
+});
 
 export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
   const [search, setSearch] = useState("");
@@ -124,18 +144,20 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
                 ))}
 
                 <td className="text-center">
-                  <button
-                    className="btn btn-sm btn-outline-primary me-2"
-                    onClick={() => onEdit(p)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => onDelete(p.id)}
-                  >
-                    Delete
-                  </button>
+                  <Dropdown align="end">
+                    <Dropdown.Toggle as={KebabToggle} id={`row-actions-${p.id}`} />
+                    <Dropdown.Menu>
+                      <Dropdown.Item onClick={() => onEdit(p)}>
+                        Edit
+                      </Dropdown.Item>
+                      <Dropdown.Item
+                        className="text-danger"
+                        onClick={() => onDelete(p.id)}
+                      >
+                        Delete
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown>
                 </td>
               </tr>
             ))}

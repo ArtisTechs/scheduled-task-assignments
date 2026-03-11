@@ -15,6 +15,7 @@ import ImportPersons from "./pages/ImportPersonsPage";
 import ScheduleMainPage from "./pages/ScheduledMainPage";
 import LoginPage from "./pages/LoginPage";
 import CongregationPersonsPage from "./pages/CongregationPersonsPage";
+import FieldServiceReportsPage from "./pages/FieldServiceReportsPage";
 import FullscreenLoader from "./components/FullscreenLoader";
 
 import "./shared/styles/global.styles.css";
@@ -192,6 +193,13 @@ export default function App() {
               ) : (
                 <Navigate to="/login" replace />
               )
+            }
+          />
+
+          <Route
+            path="/field-service-reports"
+            element={
+              user ? <FieldServiceReportsPage /> : <Navigate to="/login" replace />
             }
           />
 

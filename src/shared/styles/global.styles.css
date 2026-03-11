@@ -8,13 +8,18 @@
 }
 
 .list-items-scroll {
-  max-height: calc(100dvh - 205px);
+  height: calc(100dvh - 205px);
   overflow-y: auto;
   border-radius: 5px;
 }
 
 .congregation-list-scroll {
   max-height: calc(100dvh - 280px);
+  border-radius: 5px;
+}
+
+.field-service-list-scroll {
+  height: calc(100dvh - 310px);
   border-radius: 5px;
 }
 
