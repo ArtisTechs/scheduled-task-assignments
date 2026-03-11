@@ -14,6 +14,7 @@ import UserAssignmentPage from "./pages/UserAssignmentPage";
 import ImportPersons from "./pages/ImportPersonsPage";
 import ScheduleMainPage from "./pages/ScheduledMainPage";
 import LoginPage from "./pages/LoginPage";
+import CongregationPersonsPage from "./pages/CongregationPersonsPage";
 import FullscreenLoader from "./components/FullscreenLoader";
 
 import "./shared/styles/global.styles.css";
@@ -100,8 +101,18 @@ export default function App() {
             backdrop
             className="bg-dark text-white"
           >
-            <Offcanvas.Header>
-              <Offcanvas.Title>Scheduler</Offcanvas.Title>
+            <Offcanvas.Header className="d-flex align-items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-link text-white p-0 text-decoration-none"
+                onClick={() => setShowMenu(false)}
+                aria-label="Close menu"
+              >
+                <i className="fas fa-arrow-left"></i>
+              </button>
+              <Offcanvas.Title className="mb-0">
+                Congregation Management System
+              </Offcanvas.Title>
             </Offcanvas.Header>
             <Offcanvas.Body className="p-0">
               <SideMenu onNavigate={() => setShowMenu(false)} />
@@ -167,6 +178,17 @@ export default function App() {
             element={
               user ? (
                 <ImportPersons persons={persons} onUpdate={setPersons} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/congregation-persons"
+            element={
+              user ? (
+                <CongregationPersonsPage />
               ) : (
                 <Navigate to="/login" replace />
               )

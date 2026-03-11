@@ -56,7 +56,7 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
   }
 
   return (
-    <div className="table-responsive">
+    <div>
       {/* Search + Filter */}
       <div className="d-flex gap-2 mb-2">
         <input
@@ -81,65 +81,67 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
         </select>
       </div>
 
-      <table className="table table-bordered table-striped align-middle">
-        <thead className="table-light">
-          <tr>
-            <th>Name</th>
-            {ROLE_LIST.map((role) => (
-              <th key={role} className="text-center">
-                {role.replace("_", " ")}
-              </th>
-            ))}
-            <th className="text-center">Actions</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {normalizedPersons.length === 0 && (
+      <div className="table-responsive list-items-scroll">
+        <table className="table table-bordered table-striped align-middle mb-0">
+          <thead className="table-dark">
             <tr>
-              <td
-                colSpan={ROLE_LIST.length + 2}
-                className="text-center text-muted"
-              >
-                No records found
-              </td>
-            </tr>
-          )}
-
-          {normalizedPersons.map((p) => (
-            <tr key={p.id}>
-              <td>{p.name}</td>
-
+              <th>Name</th>
               {ROLE_LIST.map((role) => (
-                <td key={role} className="text-center">
-                  <input
-                    type="checkbox"
-                    className="form-check-input"
-                    checked={p.roles.includes(role)}
-                    disabled={savingId === p.id}
-                    onChange={() => toggleRole(p.id, role)}
-                  />
-                </td>
+                <th key={role} className="text-center">
+                  {role.replace("_", " ")}
+                </th>
               ))}
-
-              <td className="text-center">
-                <button
-                  className="btn btn-sm btn-outline-primary me-2"
-                  onClick={() => onEdit(p)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={() => onDelete(p.id)}
-                >
-                  Delete
-                </button>
-              </td>
+              <th className="text-center">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {normalizedPersons.length === 0 && (
+              <tr>
+                <td
+                  colSpan={ROLE_LIST.length + 2}
+                  className="text-center text-muted"
+                >
+                  No records found
+                </td>
+              </tr>
+            )}
+
+            {normalizedPersons.map((p) => (
+              <tr key={p.id}>
+                <td>{p.name}</td>
+
+                {ROLE_LIST.map((role) => (
+                  <td key={role} className="text-center">
+                    <input
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={p.roles.includes(role)}
+                      disabled={savingId === p.id}
+                      onChange={() => toggleRole(p.id, role)}
+                    />
+                  </td>
+                ))}
+
+                <td className="text-center">
+                  <button
+                    className="btn btn-sm btn-outline-primary me-2"
+                    onClick={() => onEdit(p)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => onDelete(p.id)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

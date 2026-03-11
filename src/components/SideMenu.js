@@ -38,6 +38,15 @@ export default function SideMenu({ onNavigate }) {
         Import Persons
       </NavLink>
 
+      <NavLink
+        to="/congregation-persons"
+        onClick={onNavigate}
+        className={linkClass}
+      >
+        <i className="fas fa-table me-2"></i>
+        Congregation Persons
+      </NavLink>
+
       <div className="flex-grow-1"></div>
 
       {/* SIGN OUT */}

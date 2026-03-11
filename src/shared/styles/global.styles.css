@@ -7,6 +7,25 @@
   border: none;
 }
 
+.list-items-scroll {
+  max-height: calc(100dvh - 205px);
+  overflow-y: auto;
+  border-radius: 5px;
+}
+
+.congregation-list-scroll {
+  max-height: calc(100dvh - 280px);
+  border-radius: 5px;
+}
+
+.list-items-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: #212529 !important;
+  color: #fff !important;
+}
+
 .section-kayamanan td {
   background-color: #5f6368 !important;
   color: #fff !important;
