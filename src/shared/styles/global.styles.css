@@ -53,13 +53,26 @@
   font-size: inherit;
 }
 
+.schedule-edit-table {
+  font-size: inherit;
+  min-width: 560px;
+}
+
 /* Mobile scaling */
 @media (max-width: 576px) {
   .schedule-view-table {
     font-size: 0.75rem;
   }
 
+  .schedule-edit-table {
+    font-size: 0.75rem;
+  }
+
   .schedule-view-table td {
+    padding: 0.35rem 0.4rem;
+  }
+
+  .schedule-edit-table td {
     padding: 0.35rem 0.4rem;
   }
 
@@ -69,6 +82,16 @@
     font-size: 0.7rem;
     white-space: nowrap;
     text-align: center;
+  }
+
+  .schedule-edit-table td[width="120"] {
+    width: 80px !important;
+  }
+
+  .schedule-edit-table .form-control,
+  .schedule-edit-table .form-select,
+  .schedule-edit-table .btn {
+    font-size: 0.75rem;
   }
 
   .week-range {

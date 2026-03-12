@@ -185,8 +185,9 @@ export default function EditableScheduleTable({
   }
 
   return (
-    <table className="table table-bordered align-middle">
-      <tbody>
+    <div className="table-responsive">
+      <table className="table table-bordered align-middle schedule-edit-table">
+        <tbody>
         {/* ================= CHAIRMAN ================= */}
         <tr className="table-light fw-semibold">
           <td colSpan="2">Chairman</td>
@@ -423,7 +424,8 @@ export default function EditableScheduleTable({
             </select>
           </td>
         </tr>
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   );
 }
