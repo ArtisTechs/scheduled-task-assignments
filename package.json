@@ -1,6 +1,6 @@
 {
   "name": "scheduled-task-assignments",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "private": true,
   "homepage": "https://artistechs.github.io/scheduled-task-assignments",
   "dependencies": {

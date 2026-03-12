@@ -32,6 +32,68 @@ const STATUS_OPTIONS = [
 const DEFAULT_MONTH = new Date().getMonth() + 1;
 const DEFAULT_YEAR = new Date().getFullYear();
 
+function toProperCase(value = "") {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (ch) => ch.toUpperCase());
+}
+
+function parseNameParts(name = "") {
+  const parts = String(name)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { firstName: "", middleName: "", lastName: "" };
+  }
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], middleName: "", lastName: "" };
+  }
+
+  if (parts.length === 2) {
+    return { firstName: parts[0], middleName: "", lastName: parts[1] };
+  }
+
+  return {
+    firstName: parts[0],
+    middleName: parts.slice(1, -1).join(" "),
+    lastName: parts[parts.length - 1],
+  };
+}
+
+function normalizeNameForCompare(name = "") {
+  return String(name || "")
+    .replace(/,/g, " ")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+}
+
+function formatPersonNameLastFirst(person = {}) {
+  const fallbackName = String(person.name || person.personName || "").trim();
+  const parsed = parseNameParts(fallbackName);
+  const firstName = toProperCase(person.firstName ?? parsed.firstName);
+  const middleName = toProperCase(person.middleName ?? parsed.middleName);
+  const lastName = toProperCase(person.lastName ?? parsed.lastName);
+
+  if (lastName && (firstName || middleName)) {
+    return `${lastName}, ${[firstName, middleName].filter(Boolean).join(" ")}`;
+  }
+
+  if (lastName) return lastName;
+
+  const combined = [firstName, middleName].filter(Boolean).join(" ");
+  if (combined) return combined;
+
+  return toProperCase(fallbackName);
+}
+
 function booleanLabel(value) {
   return value ? "Yes" : "No";
 }
@@ -90,6 +152,7 @@ export default function FieldServiceReportsPage() {
   const [selectedMonth, setSelectedMonth] = useState(DEFAULT_MONTH);
   const [selectedYear, setSelectedYear] = useState(DEFAULT_YEAR);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [reportSearch, setReportSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingReportId, setEditingReportId] = useState(null);
   const [selectedPersonId, setSelectedPersonId] = useState("");
@@ -158,6 +221,9 @@ export default function FieldServiceReportsPage() {
   const selectedPerson = useMemo(() => {
     return persons.find((person) => person.id === selectedPersonId) || null;
   }, [persons, selectedPersonId]);
+  const personById = useMemo(() => {
+    return new Map(persons.map((person) => [String(person.id || "").trim(), person]));
+  }, [persons]);
 
   const isRegularPioneer = Boolean(selectedPerson?.regularPioneer);
   const isAuxiliaryPioneer = !isRegularPioneer && form.auxiliaryPioneer;
@@ -171,11 +237,56 @@ export default function FieldServiceReportsPage() {
 
   const filteredPersonOptions = useMemo(() => {
     const normalizedSearch = personSearch.trim().toLowerCase();
-    if (!normalizedSearch) return persons;
-    return persons.filter((person) =>
-      String(person.name || "").toLowerCase().includes(normalizedSearch)
+    const matchedPersons = normalizedSearch
+      ? persons.filter((person) => {
+          const searchableName = `${String(person.name || "")} ${formatPersonNameLastFirst(
+            person
+          )}`.toLowerCase();
+          return searchableName.includes(normalizedSearch);
+        })
+      : persons;
+
+    return [...matchedPersons].sort((a, b) =>
+      formatPersonNameLastFirst(a).localeCompare(formatPersonNameLastFirst(b), undefined, {
+        sensitivity: "base",
+      })
     );
   }, [persons, personSearch]);
+
+  const filteredReports = useMemo(() => {
+    const normalizedSearch = reportSearch.trim().toLowerCase();
+
+    const matchedReports = reports.filter((report) => {
+      if (report.month !== selectedMonth) return false;
+      if (report.year !== selectedYear) return false;
+      if (statusFilter !== "all" && reportStatusKey(report) !== statusFilter) {
+        return false;
+      }
+      if (normalizedSearch) {
+        const reportPersonId = String(report.personId || "").trim();
+        const linkedPerson = reportPersonId ? personById.get(reportPersonId) : null;
+        const displayName = formatPersonNameLastFirst(
+          linkedPerson || { personName: report.personName }
+        ).toLowerCase();
+        const rawName = String(report.personName || "").toLowerCase();
+
+        if (!displayName.includes(normalizedSearch) && !rawName.includes(normalizedSearch)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    return [...matchedReports].sort((a, b) => {
+      const aPerson = personById.get(String(a.personId || "").trim()) || a;
+      const bPerson = personById.get(String(b.personId || "").trim()) || b;
+      return formatPersonNameLastFirst(aPerson).localeCompare(
+        formatPersonNameLastFirst(bPerson),
+        undefined,
+        { sensitivity: "base" }
+      );
+    });
+  }, [reports, selectedMonth, selectedYear, statusFilter, reportSearch, personById]);
 
   const yearOptions = useMemo(() => {
     const yearsFromData = reports
@@ -190,16 +301,6 @@ export default function FieldServiceReportsPage() {
     return [...years].sort((a, b) => b - a);
   }, [reports]);
 
-  const filteredReports = useMemo(() => {
-    return reports.filter((report) => {
-      if (report.month !== selectedMonth) return false;
-      if (report.year !== selectedYear) return false;
-      if (statusFilter !== "all" && reportStatusKey(report) !== statusFilter) {
-        return false;
-      }
-      return true;
-    });
-  }, [reports, selectedMonth, selectedYear, statusFilter]);
   const totalHours = useMemo(() => {
     return filteredReports.reduce((sum, report) => {
       const hours = Number(report.hours);
@@ -243,12 +344,15 @@ export default function FieldServiceReportsPage() {
   function openEditModal(report) {
     const matchedPerson =
       persons.find((person) => person.id === report.personId) ||
-      persons.find((person) => person.name === report.personName) ||
+      persons.find(
+        (person) =>
+          normalizeNameForCompare(person.name) === normalizeNameForCompare(report.personName)
+      ) ||
       null;
 
     setEditingReportId(report.id);
     setSelectedPersonId(matchedPerson?.id || "");
-    setPersonSearch(matchedPerson?.name || report.personName || "");
+    setPersonSearch(formatPersonNameLastFirst(matchedPerson || report));
     setForm({
       auxiliaryPioneer: Boolean(report.auxiliaryPioneer),
       sharedMinistry: Boolean(report.sharedMinistry),
@@ -278,7 +382,7 @@ export default function FieldServiceReportsPage() {
 
   function handlePersonSelect(person) {
     setSelectedPersonId(person.id);
-    setPersonSearch(person.name || "");
+    setPersonSearch(formatPersonNameLastFirst(person));
     setForm((prev) => ({
       ...prev,
       auxiliaryPioneer: false,
@@ -354,8 +458,8 @@ export default function FieldServiceReportsPage() {
       const samePersonById =
         String(report.personId || "").trim() === String(selected.id || "").trim();
       const samePersonByName =
-        String(report.personName || "").trim().toLowerCase() ===
-        String(selected.name || "").trim().toLowerCase();
+        normalizeNameForCompare(report.personName) ===
+        normalizeNameForCompare(selected.name);
 
       return samePersonById || samePersonByName;
     });
@@ -504,6 +608,20 @@ export default function FieldServiceReportsPage() {
               ))}
             </select>
           </div>
+
+          <div className="col-12 col-md-3">
+            <label htmlFor="field-service-search" className="form-label mb-1">
+              Search
+            </label>
+            <input
+              id="field-service-search"
+              type="search"
+              className="form-control"
+              placeholder="Search person..."
+              value={reportSearch}
+              onChange={(e) => setReportSearch(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -548,7 +666,11 @@ export default function FieldServiceReportsPage() {
             ) : (
               filteredReports.map((report) => (
                 <tr key={report.id}>
-                  <td>{report.personName || "-"}</td>
+                  <td>
+                    {formatPersonNameLastFirst(
+                      personById.get(String(report.personId || "").trim()) || report
+                    ) || "-"}
+                  </td>
                   <td>{reportStatusLabel(report)}</td>
                   <td>{booleanLabel(report.sharedMinistry)}</td>
                   <td>{report.hours ?? "-"}</td>
@@ -645,7 +767,7 @@ export default function FieldServiceReportsPage() {
                       }`}
                       onClick={() => handlePersonSelect(person)}
                     >
-                      {person.name}
+                      {formatPersonNameLastFirst(person)}
                     </button>
                   ))
                 )}
@@ -771,7 +893,15 @@ export default function FieldServiceReportsPage() {
         </Modal.Header>
         <Modal.Body>
           Delete report for{" "}
-          <strong>{reportToDelete?.personName || "this person"}</strong>?
+          <strong>
+            {reportToDelete
+              ? formatPersonNameLastFirst(
+                  personById.get(String(reportToDelete.personId || "").trim()) ||
+                    reportToDelete
+                )
+              : "this person"}
+          </strong>
+          ?
           This action cannot be undone.
         </Modal.Body>
         <Modal.Footer>
