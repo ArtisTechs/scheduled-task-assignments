@@ -37,7 +37,7 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
       .map((p) => ({
         id: p.id,
         name: p.name ?? "",
-        roles: Array.isArray(p.roles) ? [...p.roles] : [], // CLONE
+        roles: Array.isArray(p.roles) ? [...p.roles] : [],
       }))
       .filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
       .filter((p) => (roleFilter ? p.roles.includes(roleFilter) : true))
@@ -51,13 +51,26 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
     const person = persons.find((p) => p.id === personId);
     if (!person) return;
 
-    // 🔒 ALWAYS CLONE
     const roles = Array.isArray(person.roles) ? [...person.roles] : [];
+
+    // Female users cannot be tagged as Student Pahayag.
+    if (role === ROLES.STUDENT_PAHAYAG && roles.includes(ROLES.FEMALE)) {
+      return;
+    }
+
     const exists = roles.includes(role);
+    let nextRoles = exists
+      ? roles.filter((r) => r !== role)
+      : [...roles, role];
+
+    // Turning on Female also removes Student Pahayag from the same person.
+    if (role === ROLES.FEMALE && !exists) {
+      nextRoles = nextRoles.filter((r) => r !== ROLES.STUDENT_PAHAYAG);
+    }
 
     const updatedPerson = {
       ...person,
-      roles: exists ? roles.filter((r) => r !== role) : [...roles, role],
+      roles: nextRoles,
     };
 
     try {
@@ -133,13 +146,20 @@ export default function Table({ persons = [], onEdit, onDelete, onUpdate }) {
 
                 {ROLE_LIST.map((role) => (
                   <td key={role} className="text-center">
-                    <input
-                      type="checkbox"
-                      className="form-check-input"
-                      checked={p.roles.includes(role)}
-                      disabled={savingId === p.id}
-                      onChange={() => toggleRole(p.id, role)}
-                    />
+                    {role === ROLES.STUDENT_PAHAYAG &&
+                    p.roles.includes(ROLES.FEMALE) ? (
+                      <span className="text-muted" title="Not available for female">
+                        -
+                      </span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={p.roles.includes(role)}
+                        disabled={savingId === p.id}
+                        onChange={() => toggleRole(p.id, role)}
+                      />
+                    )}
                   </td>
                 ))}
 

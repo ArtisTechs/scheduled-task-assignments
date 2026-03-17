@@ -11,7 +11,7 @@ import {
   formatDateLong,
   autoAssignSchedule,
 } from "../shared/services/schedule-assignment.service";
-import { SCHEDULE_TEMPLATE } from "../shared/constants";
+import { MINISTERYO_RULES, SCHEDULE_TEMPLATE } from "../shared/constants";
 import { showToast } from "../shared/services/toast.service";
 
 import {
@@ -24,7 +24,7 @@ import { fetchPersons } from "../shared/services/persons.firestore";
    NORMALIZER (CRITICAL)
 ======================= */
 function normalizeSchedule(loaded) {
-  return {
+  const normalized = {
     ...structuredClone(SCHEDULE_TEMPLATE),
     ...loaded,
 
@@ -50,10 +50,71 @@ function normalizeSchedule(loaded) {
       };
     }),
   };
+
+  normalized.chairman.locked = false;
+  normalized.prayer.locked = false;
+  normalized.sections = (normalized.sections || []).map((section) => ({
+    ...section,
+    items: (section.items || []).map((item) => ({
+      ...item,
+      locked: false,
+    })),
+  }));
+
+  const kayamanan = normalized.sections.find((s) => s.key === "KAYAMANAN");
+  const talkItem = kayamanan?.items?.find((item) => item.key === "TALK");
+  if (talkItem && (!talkItem.title || talkItem.title === "Talk")) {
+    talkItem.title = "Talk: ";
+  }
+
+  const MINISTRY_TITLE_MIGRATION = {
+    "Ipaliwanag ang Paniniwala mo":
+      "Ipaliwanag ang Paniniwala Mo - Pagtatanghal",
+  };
+
+  const ministeryo = normalized.sections.find((s) => s.key === "MINISTERYO");
+  ministeryo?.items?.forEach((item) => {
+    const migratedTitle = MINISTRY_TITLE_MIGRATION[item.title];
+    if (migratedTitle) {
+      item.title = migratedTitle;
+    }
+
+    const rule = MINISTERYO_RULES[item.title];
+    if (!rule) return;
+
+    item.allowedRoles = rule.allowedRoles;
+    item.maxAssignees = rule.maxAssignees;
+  });
+
+  return normalized;
+}
+
+function stripTransientLocks(schedule) {
+  const copy = structuredClone(schedule);
+
+  if (copy.chairman) {
+    delete copy.chairman.locked;
+  }
+
+  if (copy.prayer) {
+    delete copy.prayer.locked;
+  }
+
+  copy.sections = (copy.sections || []).map((section) => ({
+    ...section,
+    items: (section.items || []).map((item) => {
+      const next = { ...item };
+      delete next.locked;
+      return next;
+    }),
+  }));
+
+  return copy;
 }
 
 export default function ScheduleMainPage({ viewOnly = false }) {
   const today = new Date().toISOString().substring(0, 10);
+  const currentWeekStart = getWeekStart(today);
 
   const [selectedDate, setSelectedDate] = useState(today);
   const [weekStart, setWeekStart] = useState(getWeekStart(today));
@@ -64,6 +125,8 @@ export default function ScheduleMainPage({ viewOnly = false }) {
 
   const [viewMode, setViewMode] = useState(true);
   const [saving, setSaving] = useState(false);
+  const isPastWeek = weekStart < currentWeekStart;
+  const canEdit = !viewOnly && !isPastWeek;
 
   /* ---- WEEK SYNC ---- */
   useEffect(() => {
@@ -120,12 +183,24 @@ export default function ScheduleMainPage({ viewOnly = false }) {
     );
   }, [weekStart]);
 
+  useEffect(() => {
+    if (isPastWeek && !viewMode) {
+      setViewMode(true);
+    }
+  }, [isPastWeek, viewMode]);
+
   async function saveSchedule() {
-    if (viewOnly) return;
+    if (!canEdit) {
+      if (isPastWeek) {
+        showToast("Past schedules are read-only.");
+      }
+      return;
+    }
 
     setSaving(true);
     try {
-      await saveWeeklySchedule(weekStart, schedule);
+      const persistableSchedule = stripTransientLocks(schedule);
+      await saveWeeklySchedule(weekStart, persistableSchedule);
 
       const all = await fetchAllSchedulesAndCache();
 
@@ -143,7 +218,12 @@ export default function ScheduleMainPage({ viewOnly = false }) {
   }
 
   function handleAutoAssign() {
-    if (viewOnly) return;
+    if (!canEdit) {
+      if (isPastWeek) {
+        showToast("Past schedules are read-only.");
+      }
+      return;
+    }
 
     const updated = autoAssignSchedule({
       schedule,
@@ -197,7 +277,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         <div className="d-flex justify-content-between align-items-center mb-2">
           <strong>{viewMode ? "" : "Edit Mode"}</strong>
 
-          {!viewOnly && (
+          {canEdit && (
             <button
               className="btn btn-sm btn-outline-secondary"
               onClick={() => setViewMode((v) => !v)}
@@ -207,8 +287,14 @@ export default function ScheduleMainPage({ viewOnly = false }) {
           )}
         </div>
 
+        {isPastWeek && !viewOnly && (
+          <div className="alert alert-warning py-2">
+            Past schedules are view-only and cannot be edited.
+          </div>
+        )}
+
         {/* TABLE */}
-        {viewMode ? (
+        {viewMode || !canEdit ? (
           <ScheduleTableView schedule={schedule} persons={persons} />
         ) : (
           <EditableScheduleTable
@@ -220,7 +306,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         )}
 
         {/* ACTIONS */}
-        {!viewMode && !viewOnly && (
+        {!viewMode && canEdit && (
           <div className="d-flex gap-2 mt-3">
             <button
               className="btn btn-outline-primary"

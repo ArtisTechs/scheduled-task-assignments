@@ -5,8 +5,9 @@ import { STORAGE_KEYS } from "../keys/storage.keys";
 const RESTRICTED_ROLES = [
   ROLES.STUDENT,
   ROLES.STUDENT_PAHAYAG,
-  ROLES.BIBLE_READER,
 ];
+const PART_REPEAT_LOOKBACK_WEEKS = 1;
+const BIBLE_READING_PART_KEY = "BIBLE_READING";
 
 // scheduleAssignmentService.js
 export function canAssign(personId, date, assignments) {
@@ -76,8 +77,34 @@ function isFemale(p) {
   return p.roles?.includes(ROLES.FEMALE);
 }
 
+function hasLeadershipRole(p) {
+  return p.roles?.includes(ROLES.ELDER) || p.roles?.includes(ROLES.MS);
+}
+
+function getPartHistoryKey(section, item) {
+  if (section?.key === "MINISTERYO") {
+    return item?.title || item?.key || "";
+  }
+
+  return item?.key || item?.title || "";
+}
+
 function getAllSchedules() {
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.SCHEDULES) || "{}");
+}
+
+function getRecentWeekKeys(
+  currentWeekStart,
+  weeks = APP_SETTINGS.assignmentRules.excludeIfAssignedWithinWeeks
+) {
+  if (!currentWeekStart) return [];
+
+  const all = getAllSchedules();
+  return Object.keys(all)
+    .filter((d) => d < currentWeekStart)
+    .sort()
+    .reverse()
+    .slice(0, weeks);
 }
 
 function getRecentAssignments(
@@ -88,11 +115,7 @@ function getRecentAssignments(
   if (!currentWeekStart) return false;
 
   const all = getAllSchedules();
-  const dates = Object.keys(all)
-    .filter((d) => d < currentWeekStart)
-    .sort()
-    .reverse()
-    .slice(0, weeks);
+  const dates = getRecentWeekKeys(currentWeekStart, weeks);
 
   return dates.some((week) => {
     const sched = all[week];
@@ -107,83 +130,287 @@ function getRecentAssignments(
   });
 }
 
-function collectUsedThisWeek(schedule) {
+function isAssignedToPartInSchedule(sched, personId, partKey) {
+  if (!sched || !partKey) return false;
+
+  if (partKey === "CHAIRMAN") {
+    return sched.chairman?.assignee === personId;
+  }
+
+  if (partKey === "PRAYER") {
+    return sched.prayer?.assignee === personId;
+  }
+
+  return sched.sections?.some((section) =>
+    section.items?.some((item) => {
+      const itemKey = getPartHistoryKey(section, item);
+      return itemKey === partKey && item.assignees?.includes(personId);
+    })
+  );
+}
+
+function wasAssignedToPartRecently(
+  personId,
+  partKey,
+  currentWeekStart,
+  weeks = APP_SETTINGS.assignmentRules.excludeIfAssignedWithinWeeks
+) {
+  if (!currentWeekStart || !partKey) return false;
+
+  const all = getAllSchedules();
+  const dates = getRecentWeekKeys(currentWeekStart, weeks);
+
+  return dates.some((week) => {
+    const sched = all[week];
+    return isAssignedToPartInSchedule(sched, personId, partKey);
+  });
+}
+
+function collectUsedFromLockedParts(schedule) {
   const used = new Set();
 
-  if (schedule.chairman.assignee) used.add(schedule.chairman.assignee);
-  if (schedule.prayer.assignee) used.add(schedule.prayer.assignee);
+  if (schedule.chairman?.locked && schedule.chairman.assignee) {
+    used.add(schedule.chairman.assignee);
+  }
 
-  schedule.sections.forEach((s) =>
-    s.items.forEach((i) => (i.assignees || []).forEach((id) => used.add(id)))
+  schedule.sections?.forEach((s) =>
+    s.items?.forEach((i) => {
+      if (!i.locked) return;
+      (i.assignees || []).forEach((id) => used.add(id));
+    })
   );
+
+  if (schedule.prayer?.locked && schedule.prayer.assignee) {
+    used.add(schedule.prayer.assignee);
+  }
 
   return used;
 }
 
 export function autoAssignSchedule({ schedule, persons, weekStart }) {
   const copy = structuredClone(schedule);
-  const usedThisWeek = collectUsedThisWeek(copy);
+  const usedThisWeek = collectUsedFromLockedParts(copy);
+  const allSchedules = getAllSchedules();
+  const historicalWeeks = Object.keys(allSchedules)
+    .filter((d) => d < weekStart)
+    .sort()
+    .reverse();
 
-  function pickCandidates(allowedRoles, max, partKey) {
-    const eligible = persons.filter((p) => {
-      if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
-      if (usedThisWeek.has(p.id)) return false;
+  const recentAssignmentCache = new Map();
+  const recentPartCache = new Map();
+  const partLastAssignedAtCache = new Map();
 
-      const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
+  function hasRecentAssignment(personId) {
+    if (recentAssignmentCache.has(personId)) {
+      return recentAssignmentCache.get(personId);
+    }
 
-      // Apply 4-week rule ONLY to restricted roles
-      if (isRestricted) {
-        return !getRecentAssignments(p.id, weekStart);
-      }
+    const value = getRecentAssignments(personId, weekStart);
+    recentAssignmentCache.set(personId, value);
+    return value;
+  }
 
-      // Existing ELDER / MS rotation stays intact
-      if (p.roles.includes(ROLES.ELDER) || p.roles.includes(ROLES.MS)) {
-        const recentParts = getRecentParts(p.id, weekStart);
-        return !recentParts.has(partKey);
-      }
+  function hasRecentPartAssignment(
+    personId,
+    partKey,
+    weeks = PART_REPEAT_LOOKBACK_WEEKS
+  ) {
+    const cacheKey = `${personId}|${partKey}|${weeks}`;
 
-      return true;
+    if (recentPartCache.has(cacheKey)) {
+      return recentPartCache.get(cacheKey);
+    }
+
+    const value = wasAssignedToPartRecently(personId, partKey, weekStart, weeks);
+    recentPartCache.set(cacheKey, value);
+    return value;
+  }
+
+  function getLastAssignedAtForPart(personId, partKey) {
+    const cacheKey = `${personId}|${partKey}`;
+    if (partLastAssignedAtCache.has(cacheKey)) {
+      return partLastAssignedAtCache.get(cacheKey);
+    }
+
+    let timestamp = Number.MIN_SAFE_INTEGER;
+
+    for (const week of historicalWeeks) {
+      const sched = allSchedules[week];
+      if (!isAssignedToPartInSchedule(sched, personId, partKey)) continue;
+      timestamp = new Date(week).getTime();
+      break;
+    }
+
+    partLastAssignedAtCache.set(cacheKey, timestamp);
+    return timestamp;
+  }
+
+  function orderTierCandidates(candidates, partKey, rotateByPart = true) {
+    if (candidates.length === 0) return [];
+
+    if (rotateByPart && partKey) {
+      return [...candidates].sort((a, b) => {
+        const aLast = getLastAssignedAtForPart(a.id, partKey);
+        const bLast = getLastAssignedAtForPart(b.id, partKey);
+
+        if (aLast !== bLast) return aLast - bLast;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    // Preserve random rotation for non-leadership pools.
+    if (candidates.every((p) => !hasLeadershipRole(p))) {
+      return shuffle(candidates);
+    }
+
+    return [...candidates].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function getCandidatesByPriority(
+    allowedRoles,
+    partKey,
+    excludedIds = new Set(),
+    {
+      avoidWeeklyPartRepeat = true,
+      rotateByPart = true,
+      partRepeatWeeks = PART_REPEAT_LOOKBACK_WEEKS,
+      applyRestrictedWeeksFilter = true,
+    } = {}
+  ) {
+    const tiers = [
+      {
+        allowUsedThisWeek: false,
+        allowRecentPart: false,
+        allowRecentRestrictedAny: false,
+      },
+      {
+        allowUsedThisWeek: false,
+        allowRecentPart: false,
+        allowRecentRestrictedAny: true,
+      },
+      {
+        allowUsedThisWeek: false,
+        allowRecentPart: true,
+        allowRecentRestrictedAny: true,
+      },
+      {
+        allowUsedThisWeek: true,
+        allowRecentPart: false,
+        allowRecentRestrictedAny: true,
+      },
+      {
+        allowUsedThisWeek: true,
+        allowRecentPart: true,
+        allowRecentRestrictedAny: true,
+      },
+    ];
+
+    const unique = [];
+    const seen = new Set();
+
+    tiers.forEach((tier) => {
+      const tierCandidates = persons.filter((p) => {
+        if (seen.has(p.id)) return false;
+        if (excludedIds.has(p.id)) return false;
+        if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
+        if (!tier.allowUsedThisWeek && usedThisWeek.has(p.id)) return false;
+        if (
+          avoidWeeklyPartRepeat &&
+          !tier.allowRecentPart &&
+          hasRecentPartAssignment(p.id, partKey, partRepeatWeeks)
+        ) {
+          return false;
+        }
+
+        const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
+        if (
+          applyRestrictedWeeksFilter &&
+          isRestricted &&
+          !tier.allowRecentRestrictedAny &&
+          hasRecentAssignment(p.id)
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+
+      orderTierCandidates(tierCandidates, partKey, rotateByPart).forEach((p) => {
+        seen.add(p.id);
+        unique.push(p);
+      });
     });
+
+    return unique;
+  }
+
+  function pickCandidates(
+    allowedRoles,
+    max,
+    partKey,
+    excludedIds = new Set(),
+    options = {}
+  ) {
+    const ordered = getCandidatesByPriority(
+      allowedRoles,
+      partKey,
+      excludedIds,
+      options
+    );
 
     /* ---- SINGLE ASSIGNEE ---- */
     if (max === 1) {
-      const ordered = eligible.every(
-        (p) => !p.roles.includes("ELDER") && !p.roles.includes("MS")
-      )
-        ? shuffle(eligible)
-        : eligible.sort((a, b) => a.name.localeCompare(b.name));
-
       return ordered.slice(0, 1);
     }
 
     /* ---- PAIR ASSIGNMENT (GENDER-SAFE) ---- */
     if (max === 2) {
-      const males = eligible.filter(isMale);
-      const females = eligible.filter(isFemale);
+      const malePair = ordered.filter(isMale).slice(0, 2);
+      const femalePair = ordered.filter(isFemale).slice(0, 2);
 
-      const malePair = males.length >= 2 ? shuffle(males).slice(0, 2) : [];
-      const femalePair =
-        females.length >= 2 ? shuffle(females).slice(0, 2) : [];
-
-      // Prefer whichever pool is larger (fairer rotation)
-      if (malePair.length && femalePair.length) {
-        return males.length >= females.length ? malePair : femalePair;
+      if (malePair.length === 2 && femalePair.length === 2) {
+        const secondMaleRank = ordered.findIndex((p) => p.id === malePair[1].id);
+        const secondFemaleRank = ordered.findIndex(
+          (p) => p.id === femalePair[1].id
+        );
+        return secondMaleRank <= secondFemaleRank ? malePair : femalePair;
       }
 
-      return malePair.length ? malePair : femalePair;
+      if (malePair.length === 2) return malePair;
+      if (femalePair.length === 2) return femalePair;
+
+      // Fallback to avoid leaving the part fully empty.
+      if (ordered.length > 0) {
+        return ordered.slice(0, Math.min(ordered.length, max));
+      }
     }
 
     /* ---- FALLBACK ---- */
-    return [];
+    return ordered.slice(0, max);
   }
 
   /* ---- Chairman ---- */
-  if (!copy.chairman.assignee) {
-    const [p] = pickCandidates(copy.chairman.allowedRoles, 1, "CHAIRMAN");
-    if (p) {
-      copy.chairman.assignee = p.id;
-      usedThisWeek.add(p.id);
+  if (!copy.chairman?.locked) {
+    const existing = copy.chairman.assignee
+      ? new Set([copy.chairman.assignee])
+      : new Set();
+    const [p] =
+      pickCandidates(copy.chairman.allowedRoles, 1, "CHAIRMAN", existing) ||
+      [];
+    const [fallback] = pickCandidates(
+      copy.chairman.allowedRoles,
+      1,
+      "CHAIRMAN"
+    );
+    const chosen = p || fallback;
+    if (chosen) {
+      copy.chairman.assignee = chosen.id;
+      usedThisWeek.add(chosen.id);
+    } else if (copy.chairman.assignee) {
+      usedThisWeek.add(copy.chairman.assignee);
     }
+  } else if (copy.chairman.assignee) {
+    usedThisWeek.add(copy.chairman.assignee);
   }
 
   /* ---- Sections ---- */
@@ -196,58 +423,82 @@ export function autoAssignSchedule({ schedule, persons, weekStart }) {
 
       item.allowedRoles = rules.allowedRoles;
       item.maxAssignees = rules.maxAssignees || item.maxAssignees;
-
-      const candidates = pickCandidates(
-        rules.allowedRoles,
-        rules.maxAssignees,
-        item.key || item.title
+      const partKey = getPartHistoryKey(section, item);
+      const isBibleReadingPart = partKey === BIBLE_READING_PART_KEY;
+      const avoidWeeklyPartRepeat =
+        section.key !== "PAMUMUHAY" || item.key === "CBS";
+      const bibleReaderWeeks = Math.max(
+        0,
+        APP_SETTINGS.assignmentRules.excludeBibleReaderIfAssignedWithinWeeks ?? 0
       );
+      const candidateOptions = isBibleReadingPart
+        ? {
+            avoidWeeklyPartRepeat: bibleReaderWeeks > 0,
+            rotateByPart: bibleReaderWeeks > 0,
+            partRepeatWeeks: bibleReaderWeeks,
+            applyRestrictedWeeksFilter: false,
+          }
+        : {
+            avoidWeeklyPartRepeat,
+            rotateByPart: avoidWeeklyPartRepeat,
+          };
 
-      if (candidates.length > 0) {
-        item.assignees = candidates.map((p) => {
+      if (item.locked) {
+        item.assignees = item.assignees || [];
+        item.assignees.forEach((id) => usedThisWeek.add(id));
+        return;
+      }
+
+      const existingIds = new Set(item.assignees || []);
+      const candidates =
+        pickCandidates(
+          rules.allowedRoles,
+          rules.maxAssignees,
+          partKey,
+          existingIds,
+          candidateOptions
+        ) || [];
+      const finalCandidates =
+        candidates.length > 0
+          ? candidates
+          : pickCandidates(
+              rules.allowedRoles,
+              rules.maxAssignees,
+              partKey,
+              new Set(),
+              candidateOptions
+            );
+
+      if (finalCandidates.length > 0) {
+        item.assignees = finalCandidates.map((p) => {
           usedThisWeek.add(p.id);
           return p.id;
         });
       } else {
         item.assignees = item.assignees || [];
+        item.assignees.forEach((id) => usedThisWeek.add(id));
       }
     });
   });
 
   /* ---- Prayer ---- */
-  if (!copy.prayer.assignee) {
-    const [p] = pickCandidates(copy.prayer.allowedRoles, 1, "PRAYER");
-    if (p) copy.prayer.assignee = p.id;
+  if (!copy.prayer?.locked) {
+    const existing = copy.prayer.assignee
+      ? new Set([copy.prayer.assignee])
+      : new Set();
+    const [p] =
+      pickCandidates(copy.prayer.allowedRoles, 1, "PRAYER", existing) || [];
+    const [fallback] = pickCandidates(copy.prayer.allowedRoles, 1, "PRAYER");
+    const chosen = p || fallback;
+    if (chosen) {
+      copy.prayer.assignee = chosen.id;
+      usedThisWeek.add(chosen.id);
+    } else if (copy.prayer.assignee) {
+      usedThisWeek.add(copy.prayer.assignee);
+    }
+  } else if (copy.prayer.assignee) {
+    usedThisWeek.add(copy.prayer.assignee);
   }
 
   return copy;
-}
-
-function getRecentParts(personId, currentWeekStart, weeks = 4) {
-  const all = getAllSchedules();
-  const dates = Object.keys(all).sort().reverse();
-
-  const history = new Set();
-
-  dates
-    .filter((d) => d < currentWeekStart)
-    .slice(0, weeks)
-    .forEach((week) => {
-      const sched = all[week];
-      if (!sched) return;
-
-      if (sched.chairman?.assignee === personId) history.add("CHAIRMAN");
-
-      if (sched.prayer?.assignee === personId) history.add("PRAYER");
-
-      sched.sections?.forEach((s) =>
-        s.items?.forEach((i) => {
-          if (i.assignees?.includes(personId)) {
-            history.add(i.key || i.title);
-          }
-        })
-      );
-    });
-
-  return history;
 }

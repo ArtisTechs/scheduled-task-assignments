@@ -5,11 +5,13 @@ import { STORAGE_KEYS } from "../shared/keys/storage.keys";
 import { APP_SETTINGS } from "../shared/constants/Settings";
 
 const CBS_KEY = "CBS";
+const BIBLE_READING_KEY = "BIBLE_READING";
+const LOCK_TOOLTIP = "Lock this part so Auto Assign will not change it.";
 
 /* =========================
    RESTRICTED ROLES (4-WEEK RULE)
 ========================= */
-const RESTRICTED_ROLES = [ROLES.STUDENT, ROLES.BIBLE_READER];
+const RESTRICTED_ROLES = [ROLES.STUDENT, ROLES.STUDENT_PAHAYAG];
 
 /* =========================
    WEEK HELPERS
@@ -34,12 +36,17 @@ function getPreviousWeekKeys(
   return weeks;
 }
 
-function getRecentlyAssignedPersonIds(weekStart) {
+function getRecentlyAssignedPersonIds(
+  weekStart,
+  count = APP_SETTINGS.assignmentRules.excludeIfAssignedWithinWeeks
+) {
+  if (count <= 0) return new Set();
+
   const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
   if (!raw) return new Set();
 
   const all = JSON.parse(raw);
-  const prevWeeks = getPreviousWeekKeys(weekStart);
+  const prevWeeks = getPreviousWeekKeys(weekStart, count);
   const used = new Set();
 
   prevWeeks.forEach((wk) => {
@@ -54,6 +61,34 @@ function getRecentlyAssignedPersonIds(weekStart) {
 
     if (sched.chairman?.assignee) used.add(sched.chairman.assignee);
     if (sched.prayer?.assignee) used.add(sched.prayer.assignee);
+  });
+
+  return used;
+}
+
+function getRecentlyAssignedBibleReaderIds(
+  weekStart,
+  count = APP_SETTINGS.assignmentRules.excludeBibleReaderIfAssignedWithinWeeks
+) {
+  if (count <= 0) return new Set();
+
+  const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
+  if (!raw) return new Set();
+
+  const all = JSON.parse(raw);
+  const prevWeeks = getPreviousWeekKeys(weekStart, count);
+  const used = new Set();
+
+  prevWeeks.forEach((wk) => {
+    const sched = all[wk];
+    if (!sched) return;
+
+    sched.sections?.forEach((sec) => {
+      sec.items?.forEach((item) => {
+        if (item.key !== BIBLE_READING_KEY) return;
+        item.assignees?.forEach((id) => used.add(id));
+      });
+    });
   });
 
   return used;
@@ -99,8 +134,10 @@ export default function EditableScheduleTable({
     currentAssignees = [],
     allowReuse = false
   ) {
-    const recentlyUsed = getRecentlyAssignedPersonIds(weekStart);
+    const studentRecentlyUsed = getRecentlyAssignedPersonIds(weekStart);
+    const bibleReaderRecentlyUsed = getRecentlyAssignedBibleReaderIds(weekStart);
     const usedThisSchedule = collectUsedThisScheduleExceptChairman(sched);
+    const isBibleReaderPart = allowedRoles.includes(ROLES.BIBLE_READER);
 
     return persons.filter((p) => {
       if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
@@ -109,9 +146,14 @@ export default function EditableScheduleTable({
 
       if (!allowReuse && usedThisSchedule.has(p.id)) return false;
 
+      if (isBibleReaderPart) {
+        if (bibleReaderRecentlyUsed.has(p.id)) return false;
+        return true;
+      }
+
       const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
 
-      if (isRestricted && recentlyUsed.has(p.id)) return false;
+      if (isRestricted && studentRecentlyUsed.has(p.id)) return false;
 
       return true;
     });
@@ -150,6 +192,7 @@ export default function EditableScheduleTable({
       maxAssignees: rule.maxAssignees,
       fixed: false,
       assignees: [],
+      locked: false,
     });
 
     onChange(copy);
@@ -169,6 +212,7 @@ export default function EditableScheduleTable({
       maxAssignees: 1,
       fixed: false,
       assignees: [],
+      locked: false,
     };
 
     const cbsIndex = items.findIndex((i) => i.key === CBS_KEY);
@@ -192,23 +236,35 @@ export default function EditableScheduleTable({
         <tr className="table-light fw-semibold">
           <td colSpan="2">Chairman</td>
           <td>
-            <select
-              className="form-select"
-              value={schedule.chairman.assignee}
-              onChange={(e) => update(["chairman", "assignee"], e.target.value)}
-            >
-              <option value="">—</option>
-              {eligiblePersons(
-                schedule,
-                schedule.chairman.allowedRoles,
-                [schedule.chairman.assignee],
-                true
-              ).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <div className="d-flex align-items-center gap-2">
+              <select
+                className="form-select"
+                value={schedule.chairman.assignee}
+                onChange={(e) =>
+                  update(["chairman", "assignee"], e.target.value)
+                }
+              >
+                <option value="">—</option>
+                {eligiblePersons(
+                  schedule,
+                  schedule.chairman.allowedRoles,
+                  [schedule.chairman.assignee],
+                  true
+                ).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="checkbox"
+                className="form-check-input lock-checkbox m-0"
+                checked={!!schedule.chairman.locked}
+                title={LOCK_TOOLTIP}
+                aria-label="Lock chairman assignment"
+                onChange={(e) => update(["chairman", "locked"], e.target.checked)}
+              />
+            </div>
           </td>
         </tr>
 
@@ -258,43 +314,45 @@ export default function EditableScheduleTable({
                 <tr key={item.key}>
                   {/* TITLE */}
                   <td>
-                    {section.key === "MINISTERYO" ? (
-                      <select
-                        className="form-select"
-                        value={item.title}
-                        onChange={(e) => {
-                          const newTitle = e.target.value;
-                          const rule = MINISTERYO_RULES[newTitle];
+                    
+                        {section.key === "MINISTERYO" ? (
+                          <select
+                            className="form-select"
+                            value={item.title}
+                            onChange={(e) => {
+                              const newTitle = e.target.value;
+                              const rule = MINISTERYO_RULES[newTitle];
 
-                          update(["sections", si, "items", ii], {
-                            ...item,
-                            title: newTitle,
-                            allowedRoles: rule.allowedRoles,
-                            maxAssignees: rule.maxAssignees,
-                            assignees: [],
-                          });
-                        }}
-                      >
-                        {Object.keys(MINISTERYO_RULES).map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    ) : item.titleEditable ? (
-                      <input
-                        className="form-control"
-                        value={item.title}
-                        onChange={(e) =>
-                          update(
-                            ["sections", si, "items", ii, "title"],
-                            e.target.value
-                          )
-                        }
-                      />
-                    ) : (
-                      item.title
-                    )}
+                              update(["sections", si, "items", ii], {
+                                ...item,
+                                title: newTitle,
+                                allowedRoles: rule.allowedRoles,
+                                maxAssignees: rule.maxAssignees,
+                                assignees: [],
+                              });
+                            }}
+                          >
+                            {Object.keys(MINISTERYO_RULES).map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </select>
+                        ) : item.titleEditable ? (
+                          <input
+                            className="form-control"
+                            value={item.title}
+                            onChange={(e) =>
+                              update(
+                                ["sections", si, "items", ii, "title"],
+                                e.target.value
+                              )
+                            }
+                          />
+                        ) : (
+                          item.title
+                        )}
+                      
                   </td>
 
                   {/* DURATION */}
@@ -317,44 +375,62 @@ export default function EditableScheduleTable({
                   </td>
 
                   <td>
-                    {Array.from({ length: item.maxAssignees }).map(
-                      (_, slotIndex) => (
-                        <select
-                          key={slotIndex}
-                          className="form-select mb-1"
-                          value={item.assignees?.[slotIndex] || ""}
-                          onChange={(e) => {
-                            const updated = [...(item.assignees || [])];
-                            updated[slotIndex] = e.target.value;
+                    <div className="d-flex align-items-start gap-2">
+                      <div className="flex-grow-1">
+                        {Array.from({ length: item.maxAssignees }).map(
+                          (_, slotIndex) => (
+                            <select
+                              key={slotIndex}
+                              className="form-select mb-1"
+                              value={item.assignees?.[slotIndex] || ""}
+                              onChange={(e) => {
+                                const updated = [...(item.assignees || [])];
+                                updated[slotIndex] = e.target.value;
 
-                            update(
-                              ["sections", si, "items", ii, "assignees"],
-                              updated.filter(Boolean)
-                            );
-                          }}
-                        >
-                          <option value="">Select person</option>
-                          {eligiblePersons(
-                            schedule,
-                            item.allowedRoles,
-                            item.assignees || []
-                          ).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      )
-                    )}
+                                update(
+                                  ["sections", si, "items", ii, "assignees"],
+                                  updated.filter(Boolean)
+                                );
+                              }}
+                            >
+                              <option value="">Select person</option>
+                              {eligiblePersons(
+                                schedule,
+                                item.allowedRoles,
+                                item.assignees || []
+                              ).map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          )
+                        )}
 
-                    {!item.fixed && (
-                      <button
-                        className="btn btn-sm btn-outline-danger mt-1"
-                        onClick={() => removeItem(si, ii)}
-                      >
-                        Remove
-                      </button>
-                    )}
+                        {!item.fixed && (
+                          <button
+                            className="btn btn-sm btn-outline-danger mt-1"
+                            onClick={() => removeItem(si, ii)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <input
+                        type="checkbox"
+                        className="form-check-input lock-checkbox mt-2"
+                        checked={!!item.locked}
+                        title={LOCK_TOOLTIP}
+                        aria-label={`Lock ${item.title} assignment`}
+                        onChange={(e) =>
+                          update(
+                            ["sections", si, "items", ii, "locked"],
+                            e.target.checked
+                          )
+                        }
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -405,23 +481,33 @@ export default function EditableScheduleTable({
         <tr className="table-light fw-semibold">
           <td colSpan="2">Panalangin</td>
           <td>
-            <select
-              className="form-select"
-              value={schedule.prayer.assignee}
-              onChange={(e) => update(["prayer", "assignee"], e.target.value)}
-            >
-              <option value="">—</option>
-              {eligiblePersons(
-                schedule,
-                schedule.prayer.allowedRoles,
-                [schedule.prayer.assignee],
-                true
-              ).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <div className="d-flex align-items-center gap-2">
+              <select
+                className="form-select"
+                value={schedule.prayer.assignee}
+                onChange={(e) => update(["prayer", "assignee"], e.target.value)}
+              >
+                <option value="">—</option>
+                {eligiblePersons(
+                  schedule,
+                  schedule.prayer.allowedRoles,
+                  [schedule.prayer.assignee],
+                  true
+                ).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="checkbox"
+                className="form-check-input lock-checkbox m-0"
+                checked={!!schedule.prayer.locked}
+                title={LOCK_TOOLTIP}
+                aria-label="Lock prayer assignment"
+                onChange={(e) => update(["prayer", "locked"], e.target.checked)}
+              />
+            </div>
           </td>
         </tr>
         </tbody>
@@ -429,3 +515,4 @@ export default function EditableScheduleTable({
     </div>
   );
 }
+

@@ -5,6 +5,7 @@ export const SCHEDULE_TEMPLATE = {
     label: "Chairman",
     allowedRoles: [ROLES.ELDER],
     assignee: "",
+    locked: false,
   },
 
   openingSong: "",
@@ -19,13 +20,14 @@ export const SCHEDULE_TEMPLATE = {
       items: [
         {
           key: "TALK",
-          title: "Talk",
+          title: "Talk: ",
           duration: 10,
           titleEditable: true,
           durationEditable: false,
           allowedRoles: [ROLES.ELDER, ROLES.MS],
           maxAssignees: 1,
           fixed: true,
+          locked: false,
         },
         {
           key: "HIYAS",
@@ -36,6 +38,7 @@ export const SCHEDULE_TEMPLATE = {
           allowedRoles: [ROLES.ELDER, ROLES.MS],
           maxAssignees: 1,
           fixed: true,
+          locked: false,
         },
         {
           key: "BIBLE_READING",
@@ -46,6 +49,7 @@ export const SCHEDULE_TEMPLATE = {
           allowedRoles: [ROLES.BIBLE_READER],
           maxAssignees: 1,
           fixed: true,
+          locked: false,
         },
       ],
     },
@@ -59,7 +63,8 @@ export const SCHEDULE_TEMPLATE = {
         "Pakikipag-usap muli",
         "Pagdalaw muli",
         "Pagawa ng mga Alagad",
-        "Ipaliwanag ang Paniniwala mo",
+        "Ipaliwanag ang Paniniwala Mo - Pagtatanghal",
+        "Ipaliwanag ang Paniniwala Mo - Pahayag",
         "Pahayag",
       ],
       items: [],
@@ -79,6 +84,7 @@ export const SCHEDULE_TEMPLATE = {
           allowedRoles: [ROLES.ELDER, ROLES.MS],
           maxAssignees: 1,
           fixed: false,
+          locked: false,
         },
         {
           key: "CBS",
@@ -88,6 +94,7 @@ export const SCHEDULE_TEMPLATE = {
           allowedRoles: [ROLES.ELDER],
           maxAssignees: 1,
           fixed: true,
+          locked: false,
         },
       ],
     },
@@ -97,6 +104,7 @@ export const SCHEDULE_TEMPLATE = {
     label: "Panalangin",
     allowedRoles: [ROLES.ELDER, ROLES.MS],
     assignee: "",
+    locked: false,
   },
 };
 
@@ -117,9 +125,13 @@ export const MINISTERYO_RULES = {
     allowedRoles: [ROLES.STUDENT],
     maxAssignees: 2,
   },
-  "Ipaliwanag ang Paniniwala mo": {
+  "Ipaliwanag ang Paniniwala Mo - Pagtatanghal": {
     allowedRoles: [ROLES.STUDENT],
     maxAssignees: 2,
+  },
+  "Ipaliwanag ang Paniniwala Mo - Pahayag": {
+    allowedRoles: [ROLES.STUDENT_PAHAYAG],
+    maxAssignees: 1,
   },
   Pahayag: {
     allowedRoles: [ROLES.STUDENT_PAHAYAG],

@@ -1,5 +1,6 @@
 export const APP_SETTINGS = {
   assignmentRules: {
-    excludeIfAssignedWithinWeeks: 8,
+    excludeIfAssignedWithinWeeks: 12,
+    excludeBibleReaderIfAssignedWithinWeeks: 4,
   },
 };
