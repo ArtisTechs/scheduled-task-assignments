@@ -17,6 +17,7 @@ import LoginPage from "./pages/LoginPage";
 import CongregationPersonsPage from "./pages/CongregationPersonsPage";
 import FieldServiceReportsPage from "./pages/FieldServiceReportsPage";
 import FullscreenLoader from "./components/FullscreenLoader";
+import StudentAssignmentCardPage from "./pages/StudentAssignmentCardPage";
 
 import "./shared/styles/global.styles.css";
 import {
@@ -200,6 +201,17 @@ export default function App() {
             path="/field-service-reports"
             element={
               user ? <FieldServiceReportsPage /> : <Navigate to="/login" replace />
+            }
+          />
+
+          <Route
+            path="/student-assignment-card"
+            element={
+              user ? (
+                <StudentAssignmentCardPage persons={persons} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
             }
           />
 

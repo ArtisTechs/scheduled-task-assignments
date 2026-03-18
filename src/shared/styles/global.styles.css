@@ -115,3 +115,105 @@
     font-size: 0.8rem !important;
   }
 }
+
+.student-assignment-page {
+  max-width: 980px;
+}
+
+.student-assignment-card {
+  width: min(100%, 500px);
+  background: #f3f3f3;
+  border: 1px solid #d5d5d5;
+  padding: 12px 24px 24px;
+  color: #141414;
+}
+
+.student-assignment-card-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.student-assignment-copy-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.student-assignment-card-capture {
+  background: #f3f3f3;
+}
+
+.student-assignment-title {
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.5px;
+  margin-bottom: 24px;
+}
+
+.student-assignment-field {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.student-assignment-label {
+  min-width: 108px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.student-assignment-value {
+  flex: 1;
+  background: #e7e8ef;
+  border-bottom: 2px dashed #7f8492;
+  padding: 4px 10px 2px;
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.student-assignment-location-block {
+  margin-top: 24px;
+  margin-bottom: 24px;
+  font-size: 1rem;
+}
+
+.student-assignment-location-block .form-check {
+  margin-bottom: 2px;
+}
+
+.student-assignment-note {
+  font-size: 0.95rem;
+  line-height: 1.35;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 576px) {
+  .student-assignment-card {
+    padding: 16px;
+  }
+
+  .student-assignment-title {
+    font-size: 1.05rem;
+    margin-bottom: 16px;
+  }
+
+  .student-assignment-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .student-assignment-label {
+    min-width: auto;
+  }
+
+  .student-assignment-location-block {
+    margin-top: 18px;
+    margin-bottom: 18px;
+  }
+}

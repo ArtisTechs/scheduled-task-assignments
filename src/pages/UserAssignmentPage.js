@@ -67,6 +67,7 @@ export default function UserAssignmentPage({ persons, onUpdate }) {
     localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(data));
 
     setLoading(false);
+    setEditing(null);
     setError("");
   }
 

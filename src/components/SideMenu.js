@@ -28,14 +28,18 @@ export default function SideMenu({ onNavigate }) {
         Meeting Schedule
       </NavLink>
 
+      <NavLink
+        to="/student-assignment-card"
+        onClick={onNavigate}
+        className={linkClass}
+      >
+        <i className="fas fa-id-card me-2"></i>
+        Student Assignment Card
+      </NavLink>
+
       <NavLink to="/list" onClick={onNavigate} className={linkClass}>
         <i className="fas fa-users me-2"></i>
         User Assignment
-      </NavLink>
-
-      <NavLink to="/import-persons" onClick={onNavigate} className={linkClass}>
-        <i className="fas fa-file-excel me-2"></i>
-        Import Persons
       </NavLink>
 
       <NavLink
@@ -54,6 +58,11 @@ export default function SideMenu({ onNavigate }) {
       >
         <i className="fas fa-clipboard-list me-2"></i>
         Field Service Reports
+      </NavLink>
+
+      <NavLink to="/import-persons" onClick={onNavigate} className={linkClass}>
+        <i className="fas fa-file-excel me-2"></i>
+        Import Persons
       </NavLink>
 
       <div className="flex-grow-1"></div>
