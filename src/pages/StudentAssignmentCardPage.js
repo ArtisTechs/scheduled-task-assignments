@@ -19,6 +19,8 @@ const STUDENT_CARD_ROLES = [
 ];
 const COPY_PADDING_PX = 28;
 const COPY_FOCUS_WAIT_MS = 1500;
+const COPY_EXPORT_CAPTURE_WIDTH_PX = 452;
+const COPY_EXPORT_VIEWPORT_WIDTH_PX = 1200;
 
 function createDefaultLocations() {
   return {
@@ -304,7 +306,6 @@ export default function StudentAssignmentCardPage({ persons = [] }) {
 
     setCopyingCard(true);
     const sourceNode = cardCaptureRef.current;
-    const sourceRect = sourceNode.getBoundingClientRect();
     const sourceCheckboxes = Array.from(
       sourceNode.querySelectorAll('input[type="checkbox"]')
     );
@@ -321,8 +322,12 @@ export default function StudentAssignmentCardPage({ persons = [] }) {
       captureWrapper.style.padding = `${COPY_PADDING_PX}px`;
       captureWrapper.style.background = "#f3f3f3";
       captureWrapper.style.boxSizing = "border-box";
+      captureWrapper.style.width = `${COPY_EXPORT_CAPTURE_WIDTH_PX + COPY_PADDING_PX * 2}px`;
 
-      clonedNode.style.width = `${Math.ceil(sourceRect.width)}px`;
+      // Keep copy output stable across desktop/mobile viewport sizes.
+      clonedNode.style.width = `${COPY_EXPORT_CAPTURE_WIDTH_PX}px`;
+      clonedNode.style.minWidth = `${COPY_EXPORT_CAPTURE_WIDTH_PX}px`;
+      clonedNode.style.maxWidth = "none";
 
       cloneCheckboxes.forEach((cloneInput, index) => {
         const sourceInput = sourceCheckboxes[index];
@@ -337,6 +342,7 @@ export default function StudentAssignmentCardPage({ persons = [] }) {
         backgroundColor: "#f3f3f3",
         scale: 2,
         useCORS: true,
+        windowWidth: COPY_EXPORT_VIEWPORT_WIDTH_PX,
       });
 
       const blob = await new Promise((resolve) =>
@@ -550,9 +556,9 @@ export default function StudentAssignmentCardPage({ persons = [] }) {
             </div>
           </div>
 
-          <div className="d-flex align-items-center justify-content-center gap-3 mt-3">
+          <div className="student-assignment-nav mt-3">
             <button
-              className="btn btn-outline-secondary"
+              className="btn btn-outline-secondary student-assignment-nav-btn"
               onClick={() => setPartIndex((index) => Math.max(index - 1, 0))}
               disabled={partIndex === 0}
             >
@@ -560,12 +566,12 @@ export default function StudentAssignmentCardPage({ persons = [] }) {
               Previous
             </button>
 
-            <span className="fw-semibold">
+            <span className="fw-semibold student-assignment-nav-status">
               Part {partIndex + 1} of {parts.length}
             </span>
 
             <button
-              className="btn btn-outline-secondary"
+              className="btn btn-outline-secondary student-assignment-nav-btn"
               onClick={() =>
                 setPartIndex((index) => Math.min(index + 1, parts.length - 1))
               }

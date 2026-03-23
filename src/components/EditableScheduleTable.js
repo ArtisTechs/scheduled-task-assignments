@@ -7,11 +7,12 @@ import { APP_SETTINGS } from "../shared/constants/Settings";
 const CBS_KEY = "CBS";
 const BIBLE_READING_KEY = "BIBLE_READING";
 const LOCK_TOOLTIP = "Lock this part so Auto Assign will not change it.";
+const PAHAYAG_RECENT_PARTS_LOOKBACK = 4;
 
 /* =========================
-   RESTRICTED ROLES (4-WEEK RULE)
+   RESTRICTED ROLES (WEEK LOOKBACK RULE)
 ========================= */
-const RESTRICTED_ROLES = [ROLES.STUDENT, ROLES.STUDENT_PAHAYAG];
+const RESTRICTED_ROLES = [ROLES.STUDENT];
 
 /* =========================
    WEEK HELPERS
@@ -94,6 +95,59 @@ function getRecentlyAssignedBibleReaderIds(
   return used;
 }
 
+function isPahayagMinistryItem(section, item) {
+  if (section?.key !== "MINISTERYO" || !item) return false;
+
+  if (item.allowedRoles?.includes(ROLES.STUDENT_PAHAYAG)) {
+    return true;
+  }
+
+  return typeof item.title === "string" && item.title.toLowerCase().includes("pahayag");
+}
+
+function getRecentlyAssignedPahayagIds(
+  weekStart,
+  count = PAHAYAG_RECENT_PARTS_LOOKBACK
+) {
+  if (count <= 0) return new Set();
+
+  const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
+  if (!raw) return new Set();
+
+  const all = JSON.parse(raw);
+  const prevWeeks = Object.keys(all)
+    .filter((wk) => wk < weekStart)
+    .sort()
+    .reverse();
+
+  const used = new Set();
+  let countedParts = 0;
+
+  for (const wk of prevWeeks) {
+    if (countedParts >= count) break;
+
+    const sched = all[wk];
+    const ministry = sched?.sections?.find((sec) => sec.key === "MINISTERYO");
+    if (!ministry?.items) continue;
+
+    for (const item of ministry.items) {
+      if (countedParts >= count) break;
+      if (!isPahayagMinistryItem(ministry, item)) continue;
+
+      const assignees = Array.isArray(item.assignees)
+        ? item.assignees.filter(Boolean)
+        : [];
+
+      if (assignees.length === 0) continue;
+
+      assignees.forEach((id) => used.add(id));
+      countedParts += 1;
+    }
+  }
+
+  return used;
+}
+
 export default function EditableScheduleTable({
   schedule,
   persons,
@@ -136,13 +190,17 @@ export default function EditableScheduleTable({
   ) {
     const studentRecentlyUsed = getRecentlyAssignedPersonIds(weekStart);
     const bibleReaderRecentlyUsed = getRecentlyAssignedBibleReaderIds(weekStart);
+    const pahayagRecentlyUsed = getRecentlyAssignedPahayagIds(weekStart);
     const usedThisSchedule = collectUsedThisScheduleExceptChairman(sched);
     const isBibleReaderPart = allowedRoles.includes(ROLES.BIBLE_READER);
+    const isPahayagPart = allowedRoles.includes(ROLES.STUDENT_PAHAYAG);
 
     return persons.filter((p) => {
       if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
 
       if (currentAssignees.includes(p.id)) return true;
+
+      if (isPahayagPart && pahayagRecentlyUsed.has(p.id)) return false;
 
       if (!allowReuse && usedThisSchedule.has(p.id)) return false;
 
@@ -153,7 +211,9 @@ export default function EditableScheduleTable({
 
       const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
 
-      if (isRestricted && studentRecentlyUsed.has(p.id)) return false;
+      if (!isPahayagPart && isRestricted && studentRecentlyUsed.has(p.id)) {
+        return false;
+      }
 
       return true;
     });

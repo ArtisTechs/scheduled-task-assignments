@@ -192,6 +192,22 @@
   margin-bottom: 18px;
 }
 
+.student-assignment-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.student-assignment-nav-btn {
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.student-assignment-nav-status {
+  white-space: nowrap;
+}
+
 @media (max-width: 576px) {
   .student-assignment-card {
     padding: 16px;
@@ -215,5 +231,28 @@
   .student-assignment-location-block {
     margin-top: 18px;
     margin-bottom: 18px;
+  }
+
+  .student-assignment-nav {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .student-assignment-nav-btn {
+    width: 100%;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.98rem;
+    line-height: 1.2;
+  }
+
+  .student-assignment-nav-status {
+    font-size: 1rem;
   }
 }

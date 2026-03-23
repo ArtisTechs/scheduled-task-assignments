@@ -4,10 +4,11 @@ import { STORAGE_KEYS } from "../keys/storage.keys";
 
 const RESTRICTED_ROLES = [
   ROLES.STUDENT,
-  ROLES.STUDENT_PAHAYAG,
 ];
 const PART_REPEAT_LOOKBACK_WEEKS = 1;
 const BIBLE_READING_PART_KEY = "BIBLE_READING";
+const PAHAYAG_PART_HISTORY_KEY = "MINISTERYO_PAHAYAG";
+const PAHAYAG_RECENT_PARTS_LOOKBACK = 4;
 
 // scheduleAssignmentService.js
 export function canAssign(personId, date, assignments) {
@@ -81,7 +82,21 @@ function hasLeadershipRole(p) {
   return p.roles?.includes(ROLES.ELDER) || p.roles?.includes(ROLES.MS);
 }
 
+function isPahayagMinistryItem(section, item) {
+  if (section?.key !== "MINISTERYO" || !item) return false;
+
+  if (item.allowedRoles?.includes(ROLES.STUDENT_PAHAYAG)) {
+    return true;
+  }
+
+  return typeof item.title === "string" && item.title.toLowerCase().includes("pahayag");
+}
+
 function getPartHistoryKey(section, item) {
+  if (isPahayagMinistryItem(section, item)) {
+    return PAHAYAG_PART_HISTORY_KEY;
+  }
+
   if (section?.key === "MINISTERYO") {
     return item?.title || item?.key || "";
   }
@@ -187,6 +202,45 @@ function collectUsedFromLockedParts(schedule) {
   return used;
 }
 
+function getRecentPahayagAssigneeIdsFromHistory(
+  allSchedules,
+  historicalWeeks,
+  partCount = PAHAYAG_RECENT_PARTS_LOOKBACK
+) {
+  if (!allSchedules || !Array.isArray(historicalWeeks) || partCount <= 0) {
+    return new Set();
+  }
+
+  const used = new Set();
+  let countedParts = 0;
+
+  for (const week of historicalWeeks) {
+    if (countedParts >= partCount) break;
+
+    const sched = allSchedules[week];
+    if (!sched) continue;
+
+    const ministry = sched.sections?.find((section) => section.key === "MINISTERYO");
+    if (!ministry?.items) continue;
+
+    for (const item of ministry.items) {
+      if (countedParts >= partCount) break;
+      if (!isPahayagMinistryItem(ministry, item)) continue;
+
+      const assignees = Array.isArray(item.assignees)
+        ? item.assignees.filter(Boolean)
+        : [];
+
+      if (assignees.length === 0) continue;
+
+      assignees.forEach((id) => used.add(id));
+      countedParts += 1;
+    }
+  }
+
+  return used;
+}
+
 export function autoAssignSchedule({ schedule, persons, weekStart }) {
   const copy = structuredClone(schedule);
   const usedThisWeek = collectUsedFromLockedParts(copy);
@@ -199,6 +253,10 @@ export function autoAssignSchedule({ schedule, persons, weekStart }) {
   const recentAssignmentCache = new Map();
   const recentPartCache = new Map();
   const partLastAssignedAtCache = new Map();
+  const recentPahayagAssignees = getRecentPahayagAssigneeIdsFromHistory(
+    allSchedules,
+    historicalWeeks
+  );
 
   function hasRecentAssignment(personId) {
     if (recentAssignmentCache.has(personId)) {
@@ -224,6 +282,10 @@ export function autoAssignSchedule({ schedule, persons, weekStart }) {
     const value = wasAssignedToPartRecently(personId, partKey, weekStart, weeks);
     recentPartCache.set(cacheKey, value);
     return value;
+  }
+
+  function hasRecentPahayagAssignment(personId) {
+    return recentPahayagAssignees.has(personId);
   }
 
   function getLastAssignedAtForPart(personId, partKey) {
@@ -309,10 +371,15 @@ export function autoAssignSchedule({ schedule, persons, weekStart }) {
     const seen = new Set();
 
     tiers.forEach((tier) => {
+      const isPahayagPart =
+        partKey === PAHAYAG_PART_HISTORY_KEY ||
+        allowedRoles.includes(ROLES.STUDENT_PAHAYAG);
+
       const tierCandidates = persons.filter((p) => {
         if (seen.has(p.id)) return false;
         if (excludedIds.has(p.id)) return false;
         if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
+        if (isPahayagPart && hasRecentPahayagAssignment(p.id)) return false;
         if (!tier.allowUsedThisWeek && usedThisWeek.has(p.id)) return false;
         if (
           avoidWeeklyPartRepeat &&
@@ -324,6 +391,7 @@ export function autoAssignSchedule({ schedule, persons, weekStart }) {
 
         const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
         if (
+          !isPahayagPart &&
           applyRestrictedWeeksFilter &&
           isRestricted &&
           !tier.allowRecentRestrictedAny &&
