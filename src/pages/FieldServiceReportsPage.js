@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown, Modal } from "react-bootstrap";
 import FullscreenLoader from "../components/FullscreenLoader";
 import { fetchCongregationPersons } from "../shared/services/congregation-persons.firestore";
@@ -29,8 +29,22 @@ const STATUS_OPTIONS = [
   { value: "auxiliary_pioneer", label: "Auxilliary Pioneer" },
   { value: "publisher", label: "Publisher" },
 ];
-const DEFAULT_MONTH = new Date().getMonth() + 1;
-const DEFAULT_YEAR = new Date().getFullYear();
+
+function getPreviousMonthPeriod(baseDate = new Date()) {
+  const previousMonthDate = new Date(
+    baseDate.getFullYear(),
+    baseDate.getMonth() - 1,
+    1
+  );
+  return {
+    month: previousMonthDate.getMonth() + 1,
+    year: previousMonthDate.getFullYear(),
+  };
+}
+
+const DEFAULT_PERIOD = getPreviousMonthPeriod();
+const DEFAULT_MONTH = DEFAULT_PERIOD.month;
+const DEFAULT_YEAR = DEFAULT_PERIOD.year;
 
 function toProperCase(value = "") {
   return String(value)
@@ -157,11 +171,14 @@ export default function FieldServiceReportsPage() {
   const [editingReportId, setEditingReportId] = useState(null);
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [personSearch, setPersonSearch] = useState("");
+  const [highlightedPersonIndex, setHighlightedPersonIndex] = useState(-1);
   const [form, setForm] = useState(INITIAL_FORM);
   const [formErrors, setFormErrors] = useState({});
   const [formErrorMessage, setFormErrorMessage] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [reportToDelete, setReportToDelete] = useState(null);
+  const personSearchInputRef = useRef(null);
+  const personOptionButtonRefs = useRef([]);
 
   useEffect(() => {
     let mounted = true;
@@ -184,19 +201,6 @@ export default function FieldServiceReportsPage() {
             (person) => String(person.status || "").toLowerCase() !== "removed"
           )
         );
-
-        const hasCurrentPeriodData = reportsData.some(
-          (report) => report.month === DEFAULT_MONTH && report.year === DEFAULT_YEAR
-        );
-        if (!hasCurrentPeriodData) {
-          const latestDatedReport = reportsData.find(
-            (report) => report.month && report.year
-          );
-          if (latestDatedReport) {
-            setSelectedMonth(latestDatedReport.month);
-            setSelectedYear(latestDatedReport.year);
-          }
-        }
       } catch (err) {
         if (!mounted) return;
         if (err?.code === "permission-denied") {
@@ -235,23 +239,78 @@ export default function FieldServiceReportsPage() {
     return Number(form.hours) > 0;
   }, [form.hours, form.sharedMinistry, showSharedCheckbox]);
 
+  const reportedPersonIdsForSelectedPeriod = useMemo(() => {
+    const ids = new Set();
+    reports.forEach((report) => {
+      if (editingReportId && report.id === editingReportId) return;
+      if (report.month !== selectedMonth || report.year !== selectedYear) return;
+
+      const personId = String(report.personId || "").trim();
+      if (personId) ids.add(personId);
+    });
+    return ids;
+  }, [reports, selectedMonth, selectedYear, editingReportId]);
+
+  const reportedPersonNamesForSelectedPeriod = useMemo(() => {
+    const names = new Set();
+    reports.forEach((report) => {
+      if (editingReportId && report.id === editingReportId) return;
+      if (report.month !== selectedMonth || report.year !== selectedYear) return;
+
+      const normalizedName = normalizeNameForCompare(report.personName);
+      if (normalizedName) names.add(normalizedName);
+    });
+    return names;
+  }, [reports, selectedMonth, selectedYear, editingReportId]);
+
+  const availablePersonsForSelectedPeriod = useMemo(() => {
+    return persons.filter((person) => {
+      const personId = String(person.id || "").trim();
+      const personName = normalizeNameForCompare(person.name);
+
+      const alreadyReportedById =
+        personId && reportedPersonIdsForSelectedPeriod.has(personId);
+      const alreadyReportedByName =
+        personName && reportedPersonNamesForSelectedPeriod.has(personName);
+
+      return !alreadyReportedById && !alreadyReportedByName;
+    });
+  }, [
+    persons,
+    reportedPersonIdsForSelectedPeriod,
+    reportedPersonNamesForSelectedPeriod,
+  ]);
+
   const filteredPersonOptions = useMemo(() => {
     const normalizedSearch = personSearch.trim().toLowerCase();
     const matchedPersons = normalizedSearch
-      ? persons.filter((person) => {
+      ? availablePersonsForSelectedPeriod.filter((person) => {
           const searchableName = `${String(person.name || "")} ${formatPersonNameLastFirst(
             person
           )}`.toLowerCase();
           return searchableName.includes(normalizedSearch);
         })
-      : persons;
+      : availablePersonsForSelectedPeriod;
 
     return [...matchedPersons].sort((a, b) =>
       formatPersonNameLastFirst(a).localeCompare(formatPersonNameLastFirst(b), undefined, {
         sensitivity: "base",
       })
     );
-  }, [persons, personSearch]);
+  }, [availablePersonsForSelectedPeriod, personSearch]);
+
+  useEffect(() => {
+    personOptionButtonRefs.current = personOptionButtonRefs.current.slice(
+      0,
+      filteredPersonOptions.length
+    );
+    setHighlightedPersonIndex((prev) => {
+      if (filteredPersonOptions.length === 0) return -1;
+      if (prev < 0) return 0;
+      if (prev >= filteredPersonOptions.length) return filteredPersonOptions.length - 1;
+      return prev;
+    });
+  }, [filteredPersonOptions]);
 
   const filteredReports = useMemo(() => {
     const normalizedSearch = reportSearch.trim().toLowerCase();
@@ -324,6 +383,7 @@ export default function FieldServiceReportsPage() {
   function resetCreateForm() {
     setSelectedPersonId("");
     setPersonSearch("");
+    setHighlightedPersonIndex(-1);
     setForm(INITIAL_FORM);
     setFormErrors({});
     setFormErrorMessage("");
@@ -353,6 +413,7 @@ export default function FieldServiceReportsPage() {
     setEditingReportId(report.id);
     setSelectedPersonId(matchedPerson?.id || "");
     setPersonSearch(formatPersonNameLastFirst(matchedPerson || report));
+    setHighlightedPersonIndex(-1);
     setForm({
       auxiliaryPioneer: Boolean(report.auxiliaryPioneer),
       sharedMinistry: Boolean(report.sharedMinistry),
@@ -367,6 +428,7 @@ export default function FieldServiceReportsPage() {
   function handlePersonSearchChange(value) {
     setPersonSearch(value);
     setSelectedPersonId("");
+    setHighlightedPersonIndex(0);
     setForm((prev) => ({
       ...prev,
       auxiliaryPioneer: false,
@@ -383,6 +445,8 @@ export default function FieldServiceReportsPage() {
   function handlePersonSelect(person) {
     setSelectedPersonId(person.id);
     setPersonSearch(formatPersonNameLastFirst(person));
+    setHighlightedPersonIndex(-1);
+    personSearchInputRef.current?.focus();
     setForm((prev) => ({
       ...prev,
       auxiliaryPioneer: false,
@@ -398,6 +462,91 @@ export default function FieldServiceReportsPage() {
 
   function clearSelectedPerson() {
     handlePersonSearchChange("");
+    personSearchInputRef.current?.focus();
+  }
+
+  function focusPersonOption(index) {
+    const button = personOptionButtonRefs.current[index];
+    if (button) button.focus();
+  }
+
+  function moveHighlightedPerson(step, focusOption = false) {
+    setHighlightedPersonIndex((prev) => {
+      const total = filteredPersonOptions.length;
+      if (total <= 0) return -1;
+
+      const nextIndex =
+        prev < 0 ? (step > 0 ? 0 : total - 1) : (prev + step + total) % total;
+      if (focusOption) focusPersonOption(nextIndex);
+      return nextIndex;
+    });
+  }
+
+  function handlePersonSearchKeyDown(event) {
+    if (event.key === "ArrowDown") {
+      if (selectedPerson) return;
+      event.preventDefault();
+      moveHighlightedPerson(1, true);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (selectedPerson) return;
+      event.preventDefault();
+      moveHighlightedPerson(-1, true);
+      return;
+    }
+
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    if (saving) return;
+
+    if (!selectedPerson) {
+      if (filteredPersonOptions.length === 0) return;
+
+      const optionIndex =
+        highlightedPersonIndex >= 0 ? highlightedPersonIndex : 0;
+      const person = filteredPersonOptions[optionIndex];
+      if (person) handlePersonSelect(person);
+      return;
+    }
+
+    handleSaveReport();
+  }
+
+  function handlePersonOptionKeyDown(event, index, person) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveHighlightedPerson(1, true);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveHighlightedPerson(-1, true);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (saving) return;
+
+      if (!selectedPerson) {
+        handlePersonSelect(person);
+      } else {
+        handleSaveReport();
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      personSearchInputRef.current?.focus();
+      return;
+    }
+
+    setHighlightedPersonIndex(index);
   }
 
   function onFormChange(field, value) {
@@ -726,6 +875,7 @@ export default function FieldServiceReportsPage() {
             <div className="position-relative">
               <input
                 id="person-search"
+                ref={personSearchInputRef}
                 type="text"
                 className={`form-control ${
                   formErrors.personId ? "is-invalid" : ""
@@ -733,6 +883,7 @@ export default function FieldServiceReportsPage() {
                 placeholder="Type to search person..."
                 value={personSearch}
                 onChange={(e) => handlePersonSearchChange(e.target.value)}
+                onKeyDown={handlePersonSearchKeyDown}
               />
               {selectedPerson && (
                 <button
@@ -758,14 +909,25 @@ export default function FieldServiceReportsPage() {
                 {filteredPersonOptions.length === 0 ? (
                   <div className="px-3 py-2 text-muted small">No matching person.</div>
                 ) : (
-                  filteredPersonOptions.map((person) => (
+                  filteredPersonOptions.map((person, index) => (
                     <button
                       key={person.id}
+                      ref={(element) => {
+                        personOptionButtonRefs.current[index] = element;
+                      }}
                       type="button"
                       className={`list-group-item list-group-item-action border-0 w-100 text-start ${
-                        selectedPersonId === person.id ? "active" : ""
+                        selectedPersonId === person.id ||
+                        (!selectedPerson && highlightedPersonIndex === index)
+                          ? "active"
+                          : ""
                       }`}
                       onClick={() => handlePersonSelect(person)}
+                      onMouseEnter={() => setHighlightedPersonIndex(index)}
+                      onFocus={() => setHighlightedPersonIndex(index)}
+                      onKeyDown={(event) =>
+                        handlePersonOptionKeyDown(event, index, person)
+                      }
                     >
                       {formatPersonNameLastFirst(person)}
                     </button>
