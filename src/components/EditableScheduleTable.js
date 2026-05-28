@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ROLES } from "../shared/constants/Roles";
 import { MINISTERYO_RULES } from "../shared/constants";
 import { STORAGE_KEYS } from "../shared/keys/storage.keys";
@@ -8,6 +8,114 @@ const CBS_KEY = "CBS";
 const BIBLE_READING_KEY = "BIBLE_READING";
 const LOCK_TOOLTIP = "Lock this part so Auto Assign will not change it.";
 const PAHAYAG_RECENT_PARTS_LOOKBACK = 4;
+
+function AssigneeDropdown({
+  value,
+  options,
+  placeholder = "Select person",
+  onChange,
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const rootRef = useRef(null);
+  const selected = useMemo(
+    () => options.find((entry) => entry.person.id === value),
+    [options, value]
+  );
+  const filteredOptions = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter(({ person }) =>
+      String(person.name || "").toLowerCase().includes(query)
+    );
+  }, [options, search]);
+
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  return (
+    <div className="assignee-dropdown" ref={rootRef}>
+      <button
+        type="button"
+        className="form-select assignee-dropdown-toggle"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((prev) => !prev);
+          setSearch("");
+        }}
+      >
+        <span className="assignee-dropdown-value">
+          {selected ? selected.person.name : placeholder}
+        </span>
+      </button>
+
+      {open && (
+        <div className="assignee-dropdown-menu">
+          <div className="assignee-dropdown-search-wrap">
+            <input
+              type="text"
+              className="form-control form-control-sm assignee-dropdown-search"
+              placeholder="Search person..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <button
+            type="button"
+            className="assignee-dropdown-item"
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+              setSearch("");
+            }}
+          >
+            {placeholder}
+          </button>
+          {filteredOptions.map(({ person, isRuleBlocked }) => (
+            <button
+              key={person.id}
+              type="button"
+              className="assignee-dropdown-item"
+              onClick={() => {
+                onChange(person.id);
+                setOpen(false);
+                setSearch("");
+              }}
+            >
+              {isRuleBlocked ? (
+                <span className="assignee-dropdown-item-content">
+                  <span className="assignee-status-dot" aria-hidden="true" />
+                  {person.name}
+                </span>
+              ) : (
+                person.name
+              )}
+            </button>
+          ))}
+          {filteredOptions.length === 0 && (
+            <div className="assignee-dropdown-empty">No matching person</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* =========================
    RESTRICTED ROLES (WEEK LOOKBACK RULE)
@@ -102,7 +210,9 @@ function isPahayagMinistryItem(section, item) {
     return true;
   }
 
-  return typeof item.title === "string" && item.title.toLowerCase().includes("pahayag");
+  return (
+    typeof item.title === "string" && item.title.toLowerCase().includes("pahayag")
+  );
 }
 
 function getRecentlyAssignedPahayagIds(
@@ -154,25 +264,16 @@ export default function EditableScheduleTable({
   weekStart,
   onChange,
 }) {
-  /* =========================
-     HELPERS
-  ========================= */
   function clone() {
     return JSON.parse(JSON.stringify(schedule));
   }
 
   function collectUsedThisScheduleExceptChairman(sched) {
     const used = new Set();
-
-    if (!sched) return used;
-
-    if (!Array.isArray(sched.sections)) {
-      return used;
-    }
+    if (!sched || !Array.isArray(sched.sections)) return used;
 
     sched.sections.forEach((s) => {
       if (!Array.isArray(s.items)) return;
-
       s.items.forEach((i) => {
         if (!Array.isArray(i.assignees)) return;
         i.assignees.forEach((id) => used.add(id));
@@ -182,7 +283,7 @@ export default function EditableScheduleTable({
     return used;
   }
 
-  function eligiblePersons(
+  function getAssigneeOptions(
     sched,
     allowedRoles,
     currentAssignees = [],
@@ -195,28 +296,34 @@ export default function EditableScheduleTable({
     const isBibleReaderPart = allowedRoles.includes(ROLES.BIBLE_READER);
     const isPahayagPart = allowedRoles.includes(ROLES.STUDENT_PAHAYAG);
 
-    return persons.filter((p) => {
-      if (!p.roles?.some((r) => allowedRoles.includes(r))) return false;
+    return persons
+      .filter((p) => p.roles?.some((r) => allowedRoles.includes(r)))
+      .map((p) => {
+        if (currentAssignees.includes(p.id)) {
+          return { person: p, isRuleBlocked: false };
+        }
 
-      if (currentAssignees.includes(p.id)) return true;
+        if (isPahayagPart && pahayagRecentlyUsed.has(p.id)) {
+          return { person: p, isRuleBlocked: true };
+        }
 
-      if (isPahayagPart && pahayagRecentlyUsed.has(p.id)) return false;
+        if (!allowReuse && usedThisSchedule.has(p.id)) {
+          return { person: p, isRuleBlocked: true };
+        }
 
-      if (!allowReuse && usedThisSchedule.has(p.id)) return false;
+        if (isBibleReaderPart) {
+          return {
+            person: p,
+            isRuleBlocked: bibleReaderRecentlyUsed.has(p.id),
+          };
+        }
 
-      if (isBibleReaderPart) {
-        if (bibleReaderRecentlyUsed.has(p.id)) return false;
-        return true;
-      }
+        const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
+        const isRecentlyUsedStudent =
+          !isPahayagPart && isRestricted && studentRecentlyUsed.has(p.id);
 
-      const isRestricted = p.roles.some((r) => RESTRICTED_ROLES.includes(r));
-
-      if (!isPahayagPart && isRestricted && studentRecentlyUsed.has(p.id)) {
-        return false;
-      }
-
-      return true;
-    });
+        return { person: p, isRuleBlocked: isRecentlyUsedStudent };
+      });
   }
 
   function update(path, value) {
@@ -292,287 +399,243 @@ export default function EditableScheduleTable({
     <div className="table-responsive">
       <table className="table table-bordered align-middle schedule-edit-table">
         <tbody>
-        {/* ================= CHAIRMAN ================= */}
-        <tr className="table-light fw-semibold">
-          <td colSpan="2">Chairman</td>
-          <td>
-            <div className="d-flex align-items-center gap-2">
-              <select
-                className="form-select"
-                value={schedule.chairman.assignee}
-                onChange={(e) =>
-                  update(["chairman", "assignee"], e.target.value)
-                }
-              >
-                <option value="">—</option>
-                {eligiblePersons(
-                  schedule,
-                  schedule.chairman.allowedRoles,
-                  [schedule.chairman.assignee],
-                  true
-                ).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+          <tr className="table-light fw-semibold">
+            <td colSpan="2">Chairman</td>
+            <td>
+              <div className="d-flex align-items-center gap-2">
+                <AssigneeDropdown
+                  value={schedule.chairman.assignee}
+                  placeholder="-"
+                  options={getAssigneeOptions(
+                    schedule,
+                    schedule.chairman.allowedRoles,
+                    [schedule.chairman.assignee],
+                    true
+                  )}
+                  onChange={(nextValue) =>
+                    update(["chairman", "assignee"], nextValue)
+                  }
+                />
+                <input
+                  type="checkbox"
+                  className="form-check-input lock-checkbox m-0"
+                  checked={!!schedule.chairman.locked}
+                  title={LOCK_TOOLTIP}
+                  aria-label="Lock chairman assignment"
+                  onChange={(e) => update(["chairman", "locked"], e.target.checked)}
+                />
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td colSpan="3">
+              Awit Blg.&nbsp;
               <input
-                type="checkbox"
-                className="form-check-input lock-checkbox m-0"
-                checked={!!schedule.chairman.locked}
-                title={LOCK_TOOLTIP}
-                aria-label="Lock chairman assignment"
-                onChange={(e) => update(["chairman", "locked"], e.target.checked)}
+                className="form-control d-inline w-auto"
+                value={schedule.openingSong}
+                onChange={(e) => update(["openingSong"], e.target.value)}
               />
-            </div>
-          </td>
-        </tr>
+            </td>
+          </tr>
 
-        {/* ================= OPENING SONG ================= */}
-        <tr>
-          <td colSpan="3">
-            Awit Blg.&nbsp;
-            <input
-              className="form-control d-inline w-auto"
-              value={schedule.openingSong}
-              onChange={(e) => update(["openingSong"], e.target.value)}
-            />
-          </td>
-        </tr>
+          {schedule.sections.map((section, si) => {
+            const items =
+              section.key === "PAMUMUHAY"
+                ? normalizePamumuhay(section)
+                : section.items;
 
-        {/* ================= SECTIONS ================= */}
-        {schedule.sections.map((section, si) => {
-          const items =
-            section.key === "PAMUMUHAY"
-              ? normalizePamumuhay(section)
-              : section.items;
-
-          return (
-            <React.Fragment key={section.key}>
-              <tr
-                className={`section-header section-${section.key.toLowerCase()}`}
-              >
-                <td colSpan="3">{section.title}</td>
-              </tr>
-
-              {section.key === "PAMUMUHAY" && (
-                <tr>
-                  <td colSpan="3">
-                    Awit Blg.&nbsp;
-                    <input
-                      className="form-control d-inline w-auto"
-                      value={schedule.pamumuhaySong}
-                      onChange={(e) =>
-                        update(["pamumuhaySong"], e.target.value)
-                      }
-                    />
-                  </td>
+            return (
+              <React.Fragment key={section.key}>
+                <tr className={`section-header section-${section.key.toLowerCase()}`}>
+                  <td colSpan="3">{section.title}</td>
                 </tr>
-              )}
 
-              {items.map((item, ii) => (
-                <tr key={item.key}>
-                  {/* TITLE */}
-                  <td>
-                    
-                        {section.key === "MINISTERYO" ? (
-                          <select
-                            className="form-select"
-                            value={item.title}
-                            onChange={(e) => {
-                              const newTitle = e.target.value;
-                              const rule = MINISTERYO_RULES[newTitle];
-
-                              update(["sections", si, "items", ii], {
-                                ...item,
-                                title: newTitle,
-                                allowedRoles: rule.allowedRoles,
-                                maxAssignees: rule.maxAssignees,
-                                assignees: [],
-                              });
-                            }}
-                          >
-                            {Object.keys(MINISTERYO_RULES).map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
-                        ) : item.titleEditable ? (
-                          <input
-                            className="form-control"
-                            value={item.title}
-                            onChange={(e) =>
-                              update(
-                                ["sections", si, "items", ii, "title"],
-                                e.target.value
-                              )
-                            }
-                          />
-                        ) : (
-                          item.title
-                        )}
-                      
-                  </td>
-
-                  {/* DURATION */}
-                  <td width="120">
-                    {item.durationEditable ? (
+                {section.key === "PAMUMUHAY" && (
+                  <tr>
+                    <td colSpan="3">
+                      Awit Blg.&nbsp;
                       <input
-                        type="number"
-                        className="form-control"
-                        value={item.duration}
-                        onChange={(e) =>
-                          update(
-                            ["sections", si, "items", ii, "duration"],
-                            +e.target.value
-                          )
-                        }
+                        className="form-control d-inline w-auto"
+                        value={schedule.pamumuhaySong}
+                        onChange={(e) => update(["pamumuhaySong"], e.target.value)}
                       />
-                    ) : (
-                      `${item.duration} min`
-                    )}
-                  </td>
+                    </td>
+                  </tr>
+                )}
 
-                  <td>
-                    <div className="d-flex align-items-start gap-2">
-                      <div className="flex-grow-1">
-                        {Array.from({ length: item.maxAssignees }).map(
-                          (_, slotIndex) => (
-                            <select
-                              key={slotIndex}
-                              className="form-select mb-1"
-                              value={item.assignees?.[slotIndex] || ""}
-                              onChange={(e) => {
-                                const updated = [...(item.assignees || [])];
-                                updated[slotIndex] = e.target.value;
+                {items.map((item, ii) => (
+                  <tr key={item.key}>
+                    <td>
+                      {section.key === "MINISTERYO" ? (
+                        <select
+                          className="form-select"
+                          value={item.title}
+                          onChange={(e) => {
+                            const newTitle = e.target.value;
+                            const rule = MINISTERYO_RULES[newTitle];
 
-                                update(
-                                  ["sections", si, "items", ii, "assignees"],
-                                  updated.filter(Boolean)
-                                );
-                              }}
+                            update(["sections", si, "items", ii], {
+                              ...item,
+                              title: newTitle,
+                              allowedRoles: rule.allowedRoles,
+                              maxAssignees: rule.maxAssignees,
+                              assignees: [],
+                            });
+                          }}
+                        >
+                          {Object.keys(MINISTERYO_RULES).map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      ) : item.titleEditable ? (
+                        <input
+                          className="form-control"
+                          value={item.title}
+                          onChange={(e) =>
+                            update(["sections", si, "items", ii, "title"], e.target.value)
+                          }
+                        />
+                      ) : (
+                        item.title
+                      )}
+                    </td>
+
+                    <td width="120">
+                      {item.durationEditable ? (
+                        <input
+                          type="number"
+                          className="form-control"
+                          value={item.duration}
+                          onChange={(e) =>
+                            update(["sections", si, "items", ii, "duration"], +e.target.value)
+                          }
+                        />
+                      ) : (
+                        `${item.duration} min`
+                      )}
+                    </td>
+
+                    <td>
+                      <div className="d-flex align-items-start gap-2">
+                        <div className="flex-grow-1">
+                          {Array.from({ length: item.maxAssignees }).map((_, slotIndex) => (
+                            <div key={slotIndex} className="mb-1">
+                              <AssigneeDropdown
+                                value={item.assignees?.[slotIndex] || ""}
+                                options={getAssigneeOptions(
+                                  schedule,
+                                  item.allowedRoles,
+                                  item.assignees || []
+                                )}
+                                onChange={(nextValue) => {
+                                  const updated = [...(item.assignees || [])];
+                                  updated[slotIndex] = nextValue;
+
+                                  update(
+                                    ["sections", si, "items", ii, "assignees"],
+                                    updated.filter(Boolean)
+                                  );
+                                }}
+                              />
+                            </div>
+                          ))}
+
+                          {!item.fixed && (
+                            <button
+                              className="btn btn-sm btn-outline-danger mt-1"
+                              onClick={() => removeItem(si, ii)}
                             >
-                              <option value="">Select person</option>
-                              {eligiblePersons(
-                                schedule,
-                                item.allowedRoles,
-                                item.assignees || []
-                              ).map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
-                            </select>
-                          )
-                        )}
+                              Remove
+                            </button>
+                          )}
+                        </div>
 
-                        {!item.fixed && (
-                          <button
-                            className="btn btn-sm btn-outline-danger mt-1"
-                            onClick={() => removeItem(si, ii)}
-                          >
-                            Remove
-                          </button>
-                        )}
+                        <input
+                          type="checkbox"
+                          className="form-check-input lock-checkbox mt-2"
+                          checked={!!item.locked}
+                          title={LOCK_TOOLTIP}
+                          aria-label={`Lock ${item.title} assignment`}
+                          onChange={(e) =>
+                            update(["sections", si, "items", ii, "locked"], e.target.checked)
+                          }
+                        />
                       </div>
-
-                      <input
-                        type="checkbox"
-                        className="form-check-input lock-checkbox mt-2"
-                        checked={!!item.locked}
-                        title={LOCK_TOOLTIP}
-                        aria-label={`Lock ${item.title} assignment`}
-                        onChange={(e) =>
-                          update(
-                            ["sections", si, "items", ii, "locked"],
-                            e.target.checked
-                          )
-                        }
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {/* ADD BUTTONS */}
-              {section.key === "MINISTERYO" && (
-                <tr>
-                  <td colSpan="3">
-                    <button
-                      className="btn btn-sm btn-outline-primary"
-                      onClick={() => addMinistryItem(si, section)}
-                    >
-                      + Add Ministry Part
-                    </button>
-                  </td>
-                </tr>
-              )}
-
-              {section.key === "PAMUMUHAY" && (
-                <tr>
-                  <td colSpan="3">
-                    <button
-                      className="btn btn-sm btn-outline-primary"
-                      onClick={() => addPamumuhayItem(si)}
-                    >
-                      + Add Pamumuhay Part
-                    </button>
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          );
-        })}
-
-        {/* ================= CLOSING SONG ================= */}
-        <tr>
-          <td colSpan="3">
-            Awit Blg.&nbsp;
-            <input
-              className="form-control d-inline w-auto"
-              value={schedule.closingSong}
-              onChange={(e) => update(["closingSong"], e.target.value)}
-            />
-          </td>
-        </tr>
-
-        {/* ================= PRAYER ================= */}
-        <tr className="table-light fw-semibold">
-          <td colSpan="2">Panalangin</td>
-          <td>
-            <div className="d-flex align-items-center gap-2">
-              <select
-                className="form-select"
-                value={schedule.prayer.assignee}
-                onChange={(e) => update(["prayer", "assignee"], e.target.value)}
-              >
-                <option value="">—</option>
-                {eligiblePersons(
-                  schedule,
-                  schedule.prayer.allowedRoles,
-                  [schedule.prayer.assignee],
-                  true
-                ).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
+                    </td>
+                  </tr>
                 ))}
-              </select>
+
+                {section.key === "MINISTERYO" && (
+                  <tr>
+                    <td colSpan="3">
+                      <button
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => addMinistryItem(si, section)}
+                      >
+                        + Add Ministry Part
+                      </button>
+                    </td>
+                  </tr>
+                )}
+
+                {section.key === "PAMUMUHAY" && (
+                  <tr>
+                    <td colSpan="3">
+                      <button
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => addPamumuhayItem(si)}
+                      >
+                        + Add Pamumuhay Part
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+
+          <tr>
+            <td colSpan="3">
+              Awit Blg.&nbsp;
               <input
-                type="checkbox"
-                className="form-check-input lock-checkbox m-0"
-                checked={!!schedule.prayer.locked}
-                title={LOCK_TOOLTIP}
-                aria-label="Lock prayer assignment"
-                onChange={(e) => update(["prayer", "locked"], e.target.checked)}
+                className="form-control d-inline w-auto"
+                value={schedule.closingSong}
+                onChange={(e) => update(["closingSong"], e.target.value)}
               />
-            </div>
-          </td>
-        </tr>
+            </td>
+          </tr>
+
+          <tr className="table-light fw-semibold">
+            <td colSpan="2">Panalangin</td>
+            <td>
+              <div className="d-flex align-items-center gap-2">
+                <AssigneeDropdown
+                  value={schedule.prayer.assignee}
+                  placeholder="-"
+                  options={getAssigneeOptions(
+                    schedule,
+                    schedule.prayer.allowedRoles,
+                    [schedule.prayer.assignee],
+                    true
+                  )}
+                  onChange={(nextValue) => update(["prayer", "assignee"], nextValue)}
+                />
+                <input
+                  type="checkbox"
+                  className="form-check-input lock-checkbox m-0"
+                  checked={!!schedule.prayer.locked}
+                  title={LOCK_TOOLTIP}
+                  aria-label="Lock prayer assignment"
+                  onChange={(e) => update(["prayer", "locked"], e.target.checked)}
+                />
+              </div>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
   );
 }
-

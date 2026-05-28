@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import html2canvas from "html2canvas";
 import EditableScheduleTable from "../components/EditableScheduleTable";
 import ScheduleTableView from "../components/ScheduleTableView";
 import FullscreenLoader from "../components/FullscreenLoader";
@@ -19,6 +20,9 @@ import {
   saveWeeklySchedule,
 } from "../shared/services/schedule.firestore";
 import { fetchPersons } from "../shared/services/persons.firestore";
+
+const SCHEDULE_COPY_PADDING_PX = 24;
+const SCHEDULE_COPY_VIEWPORT_WIDTH_PX = 1200;
 
 /* =======================
    NORMALIZER (CRITICAL)
@@ -125,6 +129,8 @@ export default function ScheduleMainPage({ viewOnly = false }) {
 
   const [viewMode, setViewMode] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [copyingSchedule, setCopyingSchedule] = useState(false);
+  const scheduleCaptureRef = useRef(null);
   const isPastWeek = weekStart < currentWeekStart;
   const canEdit = !viewOnly && !isPastWeek;
 
@@ -234,6 +240,103 @@ export default function ScheduleMainPage({ viewOnly = false }) {
     setSchedule(updated);
   }
 
+  async function handleCopyScheduleImage() {
+    if (!scheduleCaptureRef.current) return;
+
+    setCopyingSchedule(true);
+    const sourceNode = scheduleCaptureRef.current;
+    const captureWrapper = document.createElement("div");
+    const clonedNode = sourceNode.cloneNode(true);
+
+    try {
+      captureWrapper.style.position = "fixed";
+      captureWrapper.style.left = "-10000px";
+      captureWrapper.style.top = "0";
+      captureWrapper.style.padding = `${SCHEDULE_COPY_PADDING_PX}px`;
+      captureWrapper.style.background = "#f3f3f3";
+      captureWrapper.style.boxSizing = "border-box";
+      captureWrapper.style.width = `${SCHEDULE_COPY_VIEWPORT_WIDTH_PX}px`;
+      captureWrapper.style.overflow = "hidden";
+
+      const copyDateLabel = document.createElement("div");
+      copyDateLabel.textContent = `Week: ${formatDateLong(
+        weekRange.start
+      )} - ${formatDateLong(weekRange.end)}`;
+      copyDateLabel.style.fontWeight = "700";
+      copyDateLabel.style.fontSize = "18px";
+      copyDateLabel.style.marginBottom = "12px";
+      copyDateLabel.style.color = "#222";
+      copyDateLabel.style.whiteSpace = "nowrap";
+
+      const availableWidth =
+        SCHEDULE_COPY_VIEWPORT_WIDTH_PX - SCHEDULE_COPY_PADDING_PX * 2;
+      const sourceWidth = sourceNode.scrollWidth;
+      const fitScale =
+        sourceWidth > availableWidth ? availableWidth / sourceWidth : 1;
+
+      clonedNode.style.width = `${sourceWidth}px`;
+      clonedNode.style.transformOrigin = "top left";
+      clonedNode.style.transform = `scale(${fitScale})`;
+
+      captureWrapper.appendChild(copyDateLabel);
+      captureWrapper.appendChild(clonedNode);
+      document.body.appendChild(captureWrapper);
+
+      const canvas = await html2canvas(captureWrapper, {
+        backgroundColor: "#f3f3f3",
+        scale: 2,
+        useCORS: true,
+        windowWidth: SCHEDULE_COPY_VIEWPORT_WIDTH_PX,
+      });
+
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, "image/png")
+      );
+
+      if (!blob) {
+        throw new Error("Unable to create image blob.");
+      }
+
+      const downloadPng = () => {
+        const link = document.createElement("a");
+        link.href = canvas.toDataURL("image/png");
+        link.download = `meeting-schedule-${weekStart}.png`;
+        link.click();
+      };
+
+      if (
+        navigator.clipboard?.write &&
+        typeof window.ClipboardItem !== "undefined"
+      ) {
+        try {
+          await navigator.clipboard.write([
+            new window.ClipboardItem({ "image/png": blob }),
+          ]);
+          showToast("Meeting schedule copied as image.");
+          return;
+        } catch (clipboardError) {
+          if (clipboardError?.name === "NotAllowedError") {
+            downloadPng();
+            showToast("Clipboard blocked. Downloaded PNG instead.");
+            return;
+          }
+          throw clipboardError;
+        }
+      }
+
+      downloadPng();
+      showToast("Clipboard image copy is not supported. Downloaded PNG instead.");
+    } catch (error) {
+      console.error(error);
+      showToast("Failed to copy schedule image.");
+    } finally {
+      if (captureWrapper.parentNode) {
+        captureWrapper.parentNode.removeChild(captureWrapper);
+      }
+      setCopyingSchedule(false);
+    }
+  }
+
   return (
     <>
       {saving && <FullscreenLoader text="Saving schedule…" />}
@@ -277,14 +380,25 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         <div className="d-flex justify-content-between align-items-center mb-2">
           <strong>{viewMode ? "" : "Edit Mode"}</strong>
 
-          {canEdit && (
+          <div className="d-flex align-items-center gap-2">
             <button
               className="btn btn-sm btn-outline-secondary"
-              onClick={() => setViewMode((v) => !v)}
+              onClick={handleCopyScheduleImage}
+              disabled={copyingSchedule}
+              title="Copy schedule as image"
             >
-              {viewMode ? "Switch to Edit" : "Switch to View"}
+              <i className="fas fa-copy"></i>
             </button>
-          )}
+
+            {canEdit && (
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => setViewMode((v) => !v)}
+              >
+                {viewMode ? "Switch to Edit" : "Switch to View"}
+              </button>
+            )}
+          </div>
         </div>
 
         {isPastWeek && !viewOnly && (
@@ -294,16 +408,18 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         )}
 
         {/* TABLE */}
-        {viewMode || !canEdit ? (
-          <ScheduleTableView schedule={schedule} persons={persons} />
-        ) : (
-          <EditableScheduleTable
-            schedule={schedule}
-            persons={persons}
-            weekStart={weekStart}
-            onChange={setSchedule}
-          />
-        )}
+        <div ref={scheduleCaptureRef} className="schedule-details-wrap">
+          {viewMode || !canEdit ? (
+            <ScheduleTableView schedule={schedule} persons={persons} />
+          ) : (
+            <EditableScheduleTable
+              schedule={schedule}
+              persons={persons}
+              weekStart={weekStart}
+              onChange={setSchedule}
+            />
+          )}
+        </div>
 
         {/* ACTIONS */}
         {!viewMode && canEdit && (
