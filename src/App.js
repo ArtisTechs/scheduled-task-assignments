@@ -16,6 +16,7 @@ import ScheduleMainPage from "./pages/ScheduledMainPage";
 import LoginPage from "./pages/LoginPage";
 import CongregationPersonsPage from "./pages/CongregationPersonsPage";
 import FieldServiceReportsPage from "./pages/FieldServiceReportsPage";
+import AttendancePage from "./pages/AttendancePage";
 import FullscreenLoader from "./components/FullscreenLoader";
 import StudentAssignmentCardPage from "./pages/StudentAssignmentCardPage";
 
@@ -202,6 +203,11 @@ export default function App() {
             element={
               user ? <FieldServiceReportsPage /> : <Navigate to="/login" replace />
             }
+          />
+
+          <Route
+            path="/attendance"
+            element={user ? <AttendancePage /> : <Navigate to="/login" replace />}
           />
 
           <Route

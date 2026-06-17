@@ -21,8 +21,8 @@ import {
 } from "../shared/services/schedule.firestore";
 import { fetchPersons } from "../shared/services/persons.firestore";
 
-const SCHEDULE_COPY_PADDING_PX = 24;
-const SCHEDULE_COPY_VIEWPORT_WIDTH_PX = 1200;
+const SCHEDULE_COPY_PADDING_PX = 12;
+const SCHEDULE_COPY_MIN_WIDTH_PX = 1200;
 
 /* =======================
    NORMALIZER (CRITICAL)
@@ -126,13 +126,28 @@ export default function ScheduleMainPage({ viewOnly = false }) {
 
   const [persons, setPersons] = useState([]);
   const [schedule, setSchedule] = useState(structuredClone(SCHEDULE_TEMPLATE));
+  const [hasWeeklySchedule, setHasWeeklySchedule] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [viewMode, setViewMode] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copyingSchedule, setCopyingSchedule] = useState(false);
   const scheduleCaptureRef = useRef(null);
+  const loadingTasksRef = useRef(0);
   const isPastWeek = weekStart < currentWeekStart;
   const canEdit = !viewOnly && !isPastWeek;
+
+  function startLoading() {
+    loadingTasksRef.current += 1;
+    setIsLoadingData(true);
+  }
+
+  function stopLoading() {
+    loadingTasksRef.current = Math.max(loadingTasksRef.current - 1, 0);
+    if (loadingTasksRef.current === 0) {
+      setIsLoadingData(false);
+    }
+  }
 
   /* ---- WEEK SYNC ---- */
   useEffect(() => {
@@ -143,40 +158,77 @@ export default function ScheduleMainPage({ viewOnly = false }) {
 
   /* ---- PERSONS ---- */
   useEffect(() => {
+    let cancelled = false;
+
     async function loadPersons() {
       const raw = localStorage.getItem(STORAGE_KEYS.PERSONS);
 
       if (raw) {
-        setPersons(JSON.parse(raw));
+        if (!cancelled) {
+          setPersons(JSON.parse(raw));
+        }
         return;
       }
 
       if (viewOnly) {
-        const personsData = await fetchPersons();
-        setPersons(personsData);
-        localStorage.setItem(STORAGE_KEYS.PERSONS, JSON.stringify(personsData));
+        startLoading();
+        try {
+          const personsData = await fetchPersons();
+          if (cancelled) return;
+          setPersons(personsData);
+          localStorage.setItem(
+            STORAGE_KEYS.PERSONS,
+            JSON.stringify(personsData)
+          );
+        } finally {
+          if (!cancelled) {
+            stopLoading();
+          }
+        }
       }
     }
 
     loadPersons();
+
+    return () => {
+      cancelled = true;
+    };
   }, [viewOnly]);
 
   /* ---- SCHEDULE LOAD ---- */
   useEffect(() => {
-    async function load() {
-      const all = await fetchAllSchedulesAndCache();
-      const weekly = all[weekStart];
+    let cancelled = false;
 
-      setSchedule(
-        weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
-      );
+    async function load() {
+      startLoading();
+      try {
+        const all = await fetchAllSchedulesAndCache();
+        if (cancelled) return;
+
+        const weekly = all[weekStart];
+
+        setHasWeeklySchedule(!!weekly);
+        setSchedule(
+          weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
+        );
+      } finally {
+        if (!cancelled) {
+          stopLoading();
+        }
+      }
     }
+
     load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
     if (!raw) {
+      setHasWeeklySchedule(false);
       setSchedule(structuredClone(SCHEDULE_TEMPLATE));
       return;
     }
@@ -184,6 +236,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
     const all = JSON.parse(raw);
     const weekly = all[weekStart];
 
+    setHasWeeklySchedule(!!weekly);
     setSchedule(
       weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
     );
@@ -213,6 +266,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
       localStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(all));
 
       const weekly = all[weekStart];
+      setHasWeeklySchedule(!!weekly);
       setSchedule(
         weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
       );
@@ -249,34 +303,50 @@ export default function ScheduleMainPage({ viewOnly = false }) {
     const clonedNode = sourceNode.cloneNode(true);
 
     try {
+      const captureWidth = Math.max(
+        SCHEDULE_COPY_MIN_WIDTH_PX,
+        sourceNode.scrollWidth || 0
+      );
+
       captureWrapper.style.position = "fixed";
       captureWrapper.style.left = "-10000px";
       captureWrapper.style.top = "0";
       captureWrapper.style.padding = `${SCHEDULE_COPY_PADDING_PX}px`;
       captureWrapper.style.background = "#f3f3f3";
       captureWrapper.style.boxSizing = "border-box";
-      captureWrapper.style.width = `${SCHEDULE_COPY_VIEWPORT_WIDTH_PX}px`;
+      captureWrapper.style.width = `${captureWidth}px`;
       captureWrapper.style.overflow = "hidden";
+      captureWrapper.style.display = "inline-block";
 
       const copyDateLabel = document.createElement("div");
       copyDateLabel.textContent = `Week: ${formatDateLong(
         weekRange.start
       )} - ${formatDateLong(weekRange.end)}`;
       copyDateLabel.style.fontWeight = "700";
-      copyDateLabel.style.fontSize = "18px";
-      copyDateLabel.style.marginBottom = "12px";
+      copyDateLabel.style.fontSize = "17px";
+      copyDateLabel.style.marginBottom = "8px";
       copyDateLabel.style.color = "#222";
       copyDateLabel.style.whiteSpace = "nowrap";
 
-      const availableWidth =
-        SCHEDULE_COPY_VIEWPORT_WIDTH_PX - SCHEDULE_COPY_PADDING_PX * 2;
-      const sourceWidth = sourceNode.scrollWidth;
-      const fitScale =
-        sourceWidth > availableWidth ? availableWidth / sourceWidth : 1;
+      clonedNode.style.width = "100%";
+      clonedNode.style.margin = "0";
+      clonedNode.style.padding = "0";
+      clonedNode.style.background = "transparent";
+      clonedNode.style.borderRadius = "0";
+      clonedNode.style.boxSizing = "border-box";
 
-      clonedNode.style.width = `${sourceWidth}px`;
-      clonedNode.style.transformOrigin = "top left";
-      clonedNode.style.transform = `scale(${fitScale})`;
+      const responsiveWrap = clonedNode.querySelector(".table-responsive");
+      if (responsiveWrap) {
+        responsiveWrap.style.width = "100%";
+        responsiveWrap.style.margin = "0";
+        responsiveWrap.style.overflowX = "visible";
+      }
+
+      const table = clonedNode.querySelector("table");
+      if (table) {
+        table.style.width = "100%";
+        table.style.maxWidth = "none";
+      }
 
       captureWrapper.appendChild(copyDateLabel);
       captureWrapper.appendChild(clonedNode);
@@ -286,7 +356,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         backgroundColor: "#f3f3f3",
         scale: 2,
         useCORS: true,
-        windowWidth: SCHEDULE_COPY_VIEWPORT_WIDTH_PX,
+        windowWidth: captureWidth,
       });
 
       const blob = await new Promise((resolve) =>
@@ -339,6 +409,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
 
   return (
     <>
+      {isLoadingData && <FullscreenLoader text="Loading schedule…" />}
       {saving && <FullscreenLoader text="Saving schedule…" />}
 
       <div className="container mt-3">
@@ -407,35 +478,45 @@ export default function ScheduleMainPage({ viewOnly = false }) {
           </div>
         )}
 
-        {/* TABLE */}
-        <div ref={scheduleCaptureRef} className="schedule-details-wrap">
-          {viewMode || !canEdit ? (
-            <ScheduleTableView schedule={schedule} persons={persons} />
-          ) : (
-            <EditableScheduleTable
-              schedule={schedule}
-              persons={persons}
-              weekStart={weekStart}
-              onChange={setSchedule}
-            />
-          )}
-        </div>
-
-        {/* ACTIONS */}
-        {!viewMode && canEdit && (
-          <div className="d-flex gap-2 mt-3">
-            <button
-              className="btn btn-outline-primary"
-              onClick={handleAutoAssign}
-            >
-              Auto Assign
-            </button>
-
-            <button className="btn btn-primary" onClick={saveSchedule}>
-              Save Schedule
-            </button>
+        {!hasWeeklySchedule && (
+          <div className="alert alert-info py-2">
+            No schedule data has been set for this week yet.
           </div>
         )}
+
+        {/* TABLE */}
+        {hasWeeklySchedule ? (
+          <>
+            <div ref={scheduleCaptureRef} className="schedule-details-wrap">
+              {viewMode || !canEdit ? (
+                <ScheduleTableView schedule={schedule} persons={persons} />
+              ) : (
+                <EditableScheduleTable
+                  schedule={schedule}
+                  persons={persons}
+                  weekStart={weekStart}
+                  onChange={setSchedule}
+                />
+              )}
+            </div>
+
+            {/* ACTIONS */}
+            {!viewMode && canEdit && (
+              <div className="d-flex gap-2 mt-3">
+                <button
+                  className="btn btn-outline-primary"
+                  onClick={handleAutoAssign}
+                >
+                  Auto Assign
+                </button>
+
+                <button className="btn btn-primary" onClick={saveSchedule}>
+                  Save Schedule
+                </button>
+              </div>
+            )}
+          </>
+        ) : null}
       </div>
     </>
   );

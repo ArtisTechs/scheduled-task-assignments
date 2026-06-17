@@ -23,6 +23,11 @@
   border-radius: 5px;
 }
 
+.attendance-list-scroll {
+  height: calc(100dvh - 310px);
+  border-radius: 5px;
+}
+
 .list-items-scroll thead th {
   position: sticky;
   top: 0;

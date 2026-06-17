@@ -60,6 +60,11 @@ export default function SideMenu({ onNavigate }) {
         Field Service Reports
       </NavLink>
 
+      <NavLink to="/attendance" onClick={onNavigate} className={linkClass}>
+        <i className="fas fa-user-check me-2"></i>
+        Attendance
+      </NavLink>
+
       <NavLink to="/import-persons" onClick={onNavigate} className={linkClass}>
         <i className="fas fa-file-excel me-2"></i>
         Import Persons
