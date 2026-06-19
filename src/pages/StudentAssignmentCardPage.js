@@ -10,6 +10,7 @@ import { fetchAllSchedulesAndCache } from "../shared/services/schedule.firestore
 import { MINISTERYO_RULES, ROLES, SCHEDULE_TEMPLATE } from "../shared/constants";
 import { STORAGE_KEYS } from "../shared/keys/storage.keys";
 import { showToast } from "../shared/services/toast.service";
+import FullscreenLoader from "../components/FullscreenLoader";
 
 const CBS_KEY = "CBS";
 const STUDENT_CARD_ROLES = [
@@ -399,6 +400,8 @@ export default function StudentAssignmentCardPage({ persons = [] }) {
 
   return (
     <div className="container mt-3 student-assignment-page">
+      {loading && <FullscreenLoader text="Loading schedule…" />}
+
       <div className="d-flex align-items-center gap-2 mb-2">
         <button
           className="btn btn-outline-secondary"
@@ -427,8 +430,6 @@ export default function StudentAssignmentCardPage({ persons = [] }) {
         {" - "}
         <span className="fw-bold fs-5">{formatDateLong(weekRange.end)}</span>
       </div>
-
-      {loading && <div className="alert alert-light border">Loading schedule...</div>}
 
       {!loading && !activePart && (
         <div className="alert alert-info border">

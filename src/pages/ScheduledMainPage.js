@@ -211,6 +211,24 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         setSchedule(
           weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
         );
+      } catch (error) {
+        if (cancelled) return;
+
+        const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
+        if (raw) {
+          const all = JSON.parse(raw);
+          const weekly = all[weekStart];
+
+          setHasWeeklySchedule(!!weekly);
+          setSchedule(
+            weekly
+              ? normalizeSchedule(weekly)
+              : structuredClone(SCHEDULE_TEMPLATE)
+          );
+        } else {
+          setHasWeeklySchedule(false);
+          setSchedule(structuredClone(SCHEDULE_TEMPLATE));
+        }
       } finally {
         if (!cancelled) {
           stopLoading();
@@ -223,23 +241,6 @@ export default function ScheduleMainPage({ viewOnly = false }) {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
-    if (!raw) {
-      setHasWeeklySchedule(false);
-      setSchedule(structuredClone(SCHEDULE_TEMPLATE));
-      return;
-    }
-
-    const all = JSON.parse(raw);
-    const weekly = all[weekStart];
-
-    setHasWeeklySchedule(!!weekly);
-    setSchedule(
-      weekly ? normalizeSchedule(weekly) : structuredClone(SCHEDULE_TEMPLATE)
-    );
   }, [weekStart]);
 
   useEffect(() => {
