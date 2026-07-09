@@ -486,7 +486,7 @@ export default function ScheduleMainPage({ viewOnly = false }) {
         )}
 
         {/* TABLE */}
-        {hasWeeklySchedule ? (
+        {hasWeeklySchedule || (!viewMode && canEdit) ? (
           <>
             <div ref={scheduleCaptureRef} className="schedule-details-wrap">
               {viewMode || !canEdit ? (
